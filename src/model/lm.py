@@ -3,7 +3,7 @@ import torch
 
 class HFModel:  
     def __init__(self, model_name: str):
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float16)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     @torch.no_grad()
@@ -14,6 +14,22 @@ class HFModel:
         outputs = self.model.generate(**inputs, max_length=max_length) #TODO: add other generation parameters as needed
         
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    @torch.no_grad()
+    def chat(self, user: str, system: str, max_new_tokens: int) -> str:
+        
+        msgs = [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ]
+        prompt = self.tokenizer.apply_chat_template(
+            msgs, add_generation_prompt=True, tokenize=False
+        )
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+        out = self.model.generate(
+            **inputs, max_new_tokens=max_new_tokens, do_sample=False, temperature=0.0
+        )
+        return self.tokenizer.decode(out[0], skip_special_tokens=True)
 
     @torch.no_grad()
     def gold_CE(self, prompt: str, gold: str) -> tuple[float, str, int]: #TODO: make this work for batched inputs
