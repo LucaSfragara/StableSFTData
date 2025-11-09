@@ -18,6 +18,19 @@ class Sample:
         )"""
 
 @dataclass
+class Dataset:
+    samples: List[Sample]
+    
+    def __len__(self) -> int:
+        return len(self.samples)
+    
+    def __getitem__(self, idx: int) -> Sample:
+        return self.samples[idx]
+    
+    def __iter__(self):
+        return iter(self.samples)
+
+@dataclass
 class ScoreRecord: 
     id: int
     score: float
