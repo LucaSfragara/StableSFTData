@@ -1,6 +1,7 @@
 import datasets
 import re
 from src.core.types import Sample, ScoreRecord
+from typing import List
 
 def _extract_label(answer:str) -> str:
     
@@ -29,7 +30,7 @@ def _extract_reasoning(answer: str) -> str:
     return m
 
 
-def load_gsm8k_dataset(split):
+def load_gsm8k_dataset(split) -> List[Sample]:
     """
     Load the GSM8K dataset from the Hugging Face datasets library.
 

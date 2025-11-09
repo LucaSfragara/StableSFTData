@@ -1,34 +1,90 @@
+from re import A
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
-
+import gc
 class HFModel:  
     def __init__(self, model_name: str):
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float16)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
+        
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            dtype=torch.bfloat16,
+            low_cpu_mem_usage=True, 
+            device_map="auto", 
+            attn_implementation="sdpa"
+
+        )
+        print(f"Model device: {self.model.device}")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        
+    
     @torch.no_grad()
     def generate(self, prompt: str, max_length: int = 50) -> str:
         
         inputs = self.tokenizer(prompt, return_tensors="pt")
+        #get tokens generate per second
         
+        start_time = torch.cuda.Event(enable_timing=True)
+        
+        start_time.record()
         outputs = self.model.generate(**inputs, max_length=max_length) #TODO: add other generation parameters as needed
+        
+        end_time = torch.cuda.Event(enable_timing=True)
+        end_time.record()
+        torch.cuda.synchronize()
+        
+        elapsed_time = start_time.elapsed_time(end_time) / 1000  # convert to
+        end_tokens = outputs.shape[1]
+        tokens_generated = end_tokens 
+        tokens_per_second = tokens_generated / elapsed_time
+        
+        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        print(f"\nGeneration Stats:")
+        print(f"Tokens generated: {tokens_generated}")
+        print(f"Time taken: {elapsed_time:.2f} seconds")
+        print(f"Tokens per second: {tokens_per_second:.2f}")
         
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
     
     @torch.no_grad()
     def chat(self, user: str, system: str, max_new_tokens: int) -> str:
         
+        torch.cuda.empty_cache()
+        gc.collect()
+        
         msgs = [
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
         ]
         prompt = self.tokenizer.apply_chat_template(
-            msgs, add_generation_prompt=True, tokenize=False
+            msgs, add_generation_prompt=True, tokenize=False, enable_thinking = False
         )
+        
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+        
+        start_time = torch.cuda.Event(enable_timing=True)
+        start_time.record()
+        
         out = self.model.generate(
-            **inputs, max_new_tokens=max_new_tokens, do_sample=False, temperature=0.0
+            **inputs, max_new_tokens=max_new_tokens, do_sample=False, use_cache=True
         )
+
+        end_time = torch.cuda.Event(enable_timing=True)
+        end_time.record()
+        torch.cuda.synchronize()
+
+        elapsed_time = start_time.elapsed_time(end_time) / 1000  # convert to
+        end_tokens = out.shape[1]
+        tokens_generated = end_tokens 
+        tokens_per_second = tokens_generated / elapsed_time
+                
+        print(f"\nGeneration Stats:")
+        print(f"Tokens generated: {tokens_generated}")
+        print(f"Time taken: {elapsed_time:.2f} seconds")
+        print(f"Tokens per second: {tokens_per_second:.2f}")
+        
+        
         return self.tokenizer.decode(out[0], skip_special_tokens=True)
 
     @torch.no_grad()
