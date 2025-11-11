@@ -259,4 +259,6 @@ dependencies:
       - uc-micro-py==1.0.3
       - universal-pathlib==0.3.4
       - wrapt==1.17.3
+      - trl==0.22.1
+      - peft==0.17.1
 prefix: /home/lsfragar/.conda/envs/env

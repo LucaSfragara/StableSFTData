@@ -10,11 +10,10 @@ from pprint import pprint
 # /Users/lucasfragara/StableSFTData/dataset_explorer.py
 
 
-
 set_verbosity_error()
 
 
-def is_hf_dataset_dir(path: str) -> bool:
+def is_hf_dataset_dir(path: str) -> Optional[bool]:
     if not os.path.isdir(path):
         return None
     # A saved Dataset has dataset_info.json; a DatasetDict has dataset_dict.json
