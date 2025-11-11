@@ -17,7 +17,7 @@ def test_hfmodel_generation():
             {"role": "system", "content": "You are a math expert."},
             {"role": "user", "content": "Natalia sold 48 clips in April and half as many in May. How many clips did she sell in total?"}
         ],
-        # Conversation 2
+        """# Conversation 2
         [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "What is the capital of France?"}
@@ -26,12 +26,12 @@ def test_hfmodel_generation():
         [
             {"role": "system", "content": "You are a creative writer."},
             {"role": "user", "content": "Write a single sentence about a robot who discovers music."}
-        ]
+        ]"""
     ]
     
     generated_text = model.chat(conversations_batch, max_new_tokens=200)
     #generated_text = model.generate(prompt="The capital of France is", max_length=20)
-    print(f"Generated text: {generated_text}")
+    print(f"Generated text: {generated_text}") 
 
 def test_hfmodel_gold_CE():
     model_name = "Qwen/Qwen3-0.6B"
@@ -53,7 +53,7 @@ def score():
 if __name__ == "__main__":
 
     #print("Testing HFModel...")
-    #test_hfmodel_generation()
-    score()
+    test_hfmodel_generation()
+    #score()
     #test_hfmodel_gold_CE()
    #test_hfmodel_generation()

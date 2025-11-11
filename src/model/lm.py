@@ -15,6 +15,10 @@ class HFModel:
             attn_implementation="sdpa"
         ).eval()
         print(f"Model device: {self.model.device}")
+
+        if self.model.device == "cpu":
+            raise ValueError("Model is on CPU. Please ensure you have a compatible GPU and the necessary libraries installed.")
+
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         
         """if self.tokenizer.pad_token is None:
