@@ -74,12 +74,13 @@ class HFModel:
         """
         torch.cuda.empty_cache()
         gc.collect()
-     
+        #print(conversations)
         prompts = [
             self.tokenizer.apply_chat_template(
-                conv, add_generation_prompt=True, tokenize=False, #enable_thinking = True
+                conv, add_generation_prompt=True, tokenize=False, enable_thinking = False
             ) for conv in conversations
         ]
+        
         batch_inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(self.model.device)
 
         #start_time = torch.cuda.Event(enable_timing=True)
@@ -88,11 +89,12 @@ class HFModel:
         out = self.model.generate(
             **batch_inputs, 
             max_new_tokens=max_new_tokens, 
-            do_sample=False,
+            do_sample=True,
             use_cache=True, 
-            temperature=1, 
+            temperature=0.2, 
+            top_p=0.9,
             pad_token_id=self.tokenizer.eos_token_id,
-            eos_token_id=self.tokenizer.eos_token_id
+            eos_token_id=self.tokenizer.eos_token_id,
         )
       
         """
