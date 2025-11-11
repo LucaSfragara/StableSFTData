@@ -55,7 +55,8 @@ def score():
 if __name__ == "__main__":
 
     #print("Testing HFModel...")
-    test_hfmodel_generation()
-    #score()
+    #test_hfmodel_generation()
+    score()
     #test_hfmodel_gold_CE()
-   #test_hfmodel_generation()
+   #test_hfmodel_generation()d
+   

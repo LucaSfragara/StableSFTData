@@ -32,8 +32,9 @@ class Scorer:
             batched=True,
             batch_size=self.batch_size,
             desc="Scoring batches", 
-            num_proc=1
         )
+        
+
         #save dataset 
         result_dataset.save_to_disk(os.path.join("results", f"{self.dataset.info.dataset_name}_scored"))
 
