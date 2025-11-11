@@ -44,7 +44,7 @@ def test_hfmodel_gold_CE():
 
 def score():
     
-    model_name = "Qwen/Qwen3-0.6B"
+    model_name = "Qwen/Qwen2-1.5B-Instruct"
     model = HFModel(model_name)
     dataset = datasets.load_dataset("gsm8k", 'main')['train']
    # dataset_d = Dataset.from_list([sample.__dict__ for sample in dataset])
@@ -57,6 +57,6 @@ if __name__ == "__main__":
     #print("Testing HFModel...")
     #test_hfmodel_generation()
     score()
+    
     #test_hfmodel_gold_CE()
-   #test_hfmodel_generation()d
-   
+   #test_hfmodel_generation()
