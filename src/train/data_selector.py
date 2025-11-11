@@ -43,17 +43,47 @@ class RandomDataSelector(DataSelector):
 class FullDataSelector(DataSelector):
     """Selects the full dataset without any filtering."""
 
-    def __init__(self):
-        super().__init__(seed=0)  # Seed is irrelevant for full selection
+    def __init__(self, seed: int):
+        super().__init__(seed=seed)
 
     def select_data(self, dataset: datasets.Dataset, n_samples: int) -> Any:
         """Returns the full dataset regardless of n_samples."""
         return dataset
     
 class ThresholdDataSelector(DataSelector):
-    pass
     """Selects samples from the dataset based on a score threshold."""
+
+    def __init__(self, score_column: str, minimum_score: float, seed: int = 42):
+        super().__init__(seed)
+        self.score_column = score_column
+        self.minimum_score = minimum_score
+
+    def select_data(self, dataset: datasets.Dataset, n_samples: int) -> Any:
+        """Selects top or bottom n_samples based on the score column."""
+        
+        if self.score_column not in dataset.column_names:
+            raise ValueError(f"Score column '{self.score_column}' not found in dataset columns.")
+        
+        sorted_dataset = dataset.filter(
+            lambda example: example[self.score_column] >= self.minimum_score
+        ).sort(self.score_column, reverse=True)
+        
+        return sorted_dataset
     
 class TopKDataSelector(DataSelector):
-    pass
     """Selects the top K samples from the dataset based on a score column."""
+
+    def __init__(self, score_column: str, k: int, ascending: bool = False, seed: int = 42):
+        super().__init__(seed)
+        self.score_column = score_column
+        self.k = k
+        self.ascending = ascending
+
+    def select_data(self, dataset: datasets.Dataset, n_samples: int) -> Any:
+        """Selects the top K samples based on the score column."""
+        if self.score_column not in dataset.column_names:
+            raise ValueError(f"Score column '{self.score_column}' not found in dataset columns.")
+
+        sorted_dataset = dataset.sort(self.score_column, reverse=not self.ascending)
+
+        return sorted_dataset.select(range(self.k))

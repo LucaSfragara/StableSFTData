@@ -8,6 +8,7 @@ from src.train import (
 )
 from datasets import load_dataset, Dataset, DatasetDict
 from src.prompts import GSM8K_FINE_TUNE, GSM8K
+from statsmodels.sandbox.panel.panelmod import ev
 
 def main():
   
@@ -21,21 +22,23 @@ def main():
     # 3. Configure training
     config = TrainingConfig(
         output_dir="checkpoints",
-        run_name="gsm8k_top1000",
+        run_name="gsm8k_default_run",
         learning_rate=2e-5,
         num_epochs=3,
-        batch_size=4,
-        gradient_accumulation_steps=4,
-        use_lora=True,  # Use LoRA for efficient fine-tuning
+        batch_size=512,
+        gradient_accumulation_steps=1,
+        use_lora=False,  # Use LoRA for efficient fine-tuning
         lora_r=16,
+        logging_steps=1,
+        eval_steps=5,
     )
     
     # 4. Select training strategy
     # Option A: Train on top-scoring examples
-    #selector = ThresholdDataSelector(score_column="score", ascending=False)
+    selector = ThresholdDataSelector(score_column="score", ascending=False)
     
     # Option B: Train on full dataset
-    selector = FullDataSelector()
+    selector = FullDataSelector(seed=42)
 
     # Option C: Random selection
     # selector = RandomDataSelector(seed=42)
