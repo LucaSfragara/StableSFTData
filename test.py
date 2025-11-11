@@ -41,7 +41,9 @@ def test_hfmodel_gold_CE():
     nll, decoded_text, token_count = model.gold_CE(prompt, gold)
     print(f"NLL: {nll}, Decoded Text:{decoded_text}, Token Count: {token_count}")
 
+
 def score():
+    
     model_name = "Qwen/Qwen3-0.6B"
     model = HFModel(model_name)
     dataset = datasets.load_dataset("gsm8k", 'main')['train']
