@@ -8,7 +8,8 @@ from src.train import (
 )
 from datasets import load_dataset, Dataset, DatasetDict
 from src.prompts import GSM8K_FINE_TUNE, GSM8K
-from statsmodels.sandbox.panel.panelmod import ev
+
+from src.train.callbacks import GenerationEvaluationCallback
 
 def main():
   
@@ -24,18 +25,18 @@ def main():
         output_dir="checkpoints",
         run_name="gsm8k_default_run",
         learning_rate=2e-5,
-        num_epochs=3,
-        batch_size=512,
+        num_epochs=1,
+        batch_size=64,
         gradient_accumulation_steps=1,
-        use_lora=False,  # Use LoRA for efficient fine-tuning
+        use_lora=True,  # Use LoRA for efficient fine-tuning
         lora_r=16,
-        logging_steps=1,
-        eval_steps=5,
+        logging_steps=20,
+        eval_steps=1,
     )
     
     # 4. Select training strategy
     # Option A: Train on top-scoring examples
-    selector = ThresholdDataSelector(score_column="score", ascending=False)
+    #selector = ThresholdDataSelector(score_column="score", ascending=False)
     
     # Option B: Train on full dataset
     selector = FullDataSelector(seed=42)
@@ -43,6 +44,7 @@ def main():
     # Option C: Random selection
     # selector = RandomDataSelector(seed=42)
 
+    
     # Option D: Threshold-based
     # 5. Initialize trainer with proper splits and optional subsampling
     trainer = Trainer(model,
@@ -50,15 +52,38 @@ def main():
                       eval_dataset=eval_dataset, #type: ignore
                       data_selector=selector,
                       config=config)
+    
+    
+    eval_callback = GenerationEvaluationCallback(
+        trainer_instance=trainer,
+        eval_dataset=eval_dataset,
+        num_eval_samples=1,
+    )
+    
+    trainer.callbacks.append(eval_callback)
     # 6. Train!
     results = trainer.train(
-        n_samples=1000,
+        n_samples=None, 
         system_prompt_train=GSM8K_FINE_TUNE,
         system_prompt_eval=GSM8K
     )
     
     print("\nTraining Results:")
     print(results)
+    
+    # 7. Evaluate generation quality on a held-out set
+    print("\n" + "="*60)
+    print("Running custom evaluation...")
+    print("="*60)
+    
+    eval_metrics = trainer.evaluate_generation_quality(
+        eval_dataset=eval_dataset,  # type: ignore
+        num_samples=1  # Evaluate on 100 random samples
+    )
+    
+    print("\nFinal Evaluation Metrics:")
+    for key, value in eval_metrics.items():
+        print(f"  {key}: {value}")
 
 if __name__ == "__main__":
     main()

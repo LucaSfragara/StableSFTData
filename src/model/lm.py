@@ -19,8 +19,8 @@ class HFModel:
         if self.model.device == "cpu":
             raise ValueError("Model is on CPU. Please ensure you have a compatible GPU and the necessary libraries installed.")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        
+        self.tokenizer  = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+      
         """if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
@@ -56,7 +56,7 @@ class HFModel:
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
     
     @torch.no_grad()
-    def chat(self, conversations: List[List[Dict[str, str]]], max_new_tokens: int) -> List[str]:
+    def chat(self, conversations: List[List[Dict[str, str]]], max_new_tokens: int, temperature:float, enable_thinking = False ) -> List[str]:
         """
         Generates responses for a batch of conversations in parallel.
 
@@ -77,7 +77,7 @@ class HFModel:
         #print(conversations)
         prompts = [
             self.tokenizer.apply_chat_template(
-                conv, add_generation_prompt=True, tokenize=False, enable_thinking = False
+                conv, add_generation_prompt=True, tokenize=False, enable_thinking=enable_thinking
             ) for conv in conversations
         ]
         
@@ -89,9 +89,9 @@ class HFModel:
         out = self.model.generate(
             **batch_inputs, 
             max_new_tokens=max_new_tokens, 
-            do_sample=True,
+            do_sample=True if temperature > 0 else False,
             use_cache=True, 
-            temperature=0.2, 
+            temperature=temperature, 
             top_p=0.9,
             pad_token_id=self.tokenizer.eos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,

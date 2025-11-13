@@ -29,7 +29,7 @@ def test_hfmodel_generation():
         ]"""
     ]
     
-    generated_text = model.chat(conversations_batch, max_new_tokens=200)
+    generated_text = model.chat(conversations_batch, max_new_tokens=200, temperature=0)
     #generated_text = model.generate(prompt="The capital of France is", max_length=20)
     print(f"Generated text: {generated_text}") 
 
@@ -44,12 +44,18 @@ def test_hfmodel_gold_CE():
 
 def score():
     
-    model_name = "Qwen/Qwen2-1.5B-Instruct"
+    model_name = "Qwen/Qwen3-0.6B"
     model = HFModel(model_name)
     dataset = datasets.load_dataset("gsm8k", 'main')['train']
    # dataset_d = Dataset.from_list([sample.__dict__ for sample in dataset])
 
-    scorer = Scorer(model, dataset, batch_size=512)
+    scorer = Scorer(model,
+                    dataset.select(range(10)), #type: ignore
+                    batch_size=10, 
+                    responses_per_sample=4,
+                    max_new_token=512,
+                    temperature=0.2,
+                    enable_thinking=True)
     scorer.score()
 
 if __name__ == "__main__":

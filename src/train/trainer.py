@@ -6,8 +6,11 @@ import os
 from trl import SFTTrainer # type: ignore
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from src.train.data_selector import RandomDataSelector, DataSelector
-from typing import Dict, Any
-from transformers import TrainingArguments
+from typing import Dict, Any, Optional
+from transformers import TrainingArguments, EvalPrediction
+import re
+import numpy as np
+from src.prompts import GSM8K_FINE_TUNE, GSM8K
 
 class Trainer: 
     
@@ -16,7 +19,8 @@ class Trainer:
                  train_dataset: datasets.Dataset,
                  eval_dataset: datasets.Dataset,
                  data_selector: DataSelector,
-                 config: TrainingConfig):
+                 config: TrainingConfig, 
+                 callbacks: Optional[list] = None):
         
         self.model = model
         self.train_dataset = train_dataset
@@ -27,6 +31,7 @@ class Trainer:
         self.device = self.model.model.device
         
         self.output_dir = os.path.join(config.output_dir, config.run_name or "default")
+        self.callbacks = callbacks or []
         
         os.makedirs(self.output_dir, exist_ok=True)
         
@@ -53,6 +58,98 @@ class Trainer:
         
         return model
 
+    def _extract_answer(self, text: str) -> Optional[str]:
+        """
+        Extract the numerical answer from generated text.
+        Looks for patterns like '#### 42' or 'The answer is 42'
+        """
+        # Try to find #### pattern (GSM8K format)
+        match = re.search(r'####\s*(-?\d+(?:\.\d+)?)', text)
+        if match:
+            return match.group(1)
+        
+        # Try to find "answer is X" pattern
+        match = re.search(r'answer is\s*(-?\d+(?:\.\d+)?)', text.lower())
+        if match:
+            return match.group(1)
+        
+        # Try to find last number in text
+        numbers = re.findall(r'-?\d+(?:\.\d+)?', text)
+        if numbers:
+            return numbers[-1]
+        
+        return None
+    
+
+    def evaluate_generation_quality(
+        self, 
+        eval_dataset: datasets.Dataset,
+        num_samples: int
+    ) -> Dict[str, float]:
+        """
+        Evaluate the model's generation quality by generating answers
+        and comparing them to ground truth.
+        
+        This is separate from the training loop evaluation.
+        Call this manually after training to assess performance.
+        """
+        print(f"\nEvaluating generation quality on {num_samples} samples...")
+        
+        # Sample from eval dataset
+        if num_samples < len(eval_dataset):
+            eval_subset = eval_dataset.shuffle(seed=42).select(range(num_samples))
+        else:
+            eval_subset = eval_dataset
+        
+        correct = 0
+        total = 0
+        
+        for example in eval_subset:
+            question = example["question"]
+            true_answer = self._extract_answer(example["answer"])
+            
+            print(f"\nQuestion: {question}")
+            print(f"True Answer: {true_answer}")
+            
+            if true_answer is None:
+                continue
+            
+            # Generate answer
+            try:
+                conversations = [[
+                    {"role": "system", "content": GSM8K},
+                    {"role": "user", "content": question}
+                ]]
+                
+                generated = self.model.chat(conversations,
+                                            max_new_tokens=512, 
+                                            enable_thinking=True, 
+                                            temperature=0.0)[0]
+                pred_answer = self._extract_answer(generated)
+            
+                print(f"Generated Answer: {generated}")
+                print(f"Predicted Answer: {pred_answer}")
+                if pred_answer is not None and pred_answer == true_answer:
+                    correct += 1
+                
+                total += 1
+                
+            except Exception as e:
+                print(f"Error generating for sample: {e}")
+                continue
+        
+        accuracy = correct / total if total > 0 else 0.0
+        
+        metrics = {
+            "generation_accuracy": accuracy,
+            "correct": correct,
+            "total": total
+        }
+        
+        print(f"Generation Accuracy: {accuracy:.2%} ({correct}/{total})")
+        
+        return metrics
+
     
     # Format as conversations
     def _format_sample(self, example, system_prompt: str) -> Dict[str, str]:
@@ -77,7 +174,7 @@ class Trainer:
 
     def prepare_train_dataset(self, 
                               dataset: datasets.Dataset,
-                              n_samples: int,
+                              n_samples: Optional[int],
                               system_prompt: str) -> datasets.Dataset:
         """Prepare dataset for training by applying data selection strategy
             and any necessary preprocessing.
@@ -88,16 +185,16 @@ class Trainer:
         selected_data = self.data_selector.select_data(dataset, n_samples=n_samples)
 
 
-        print(f"Selected {len(selected_data)} samples from the training dataset.")
+        print(f" --> selected {len(selected_data)} samples from the training dataset.")
         
         selected_data = selected_data.map(
             lambda example: self._format_sample(example, system_prompt),
-            desc="Formatting examples",
+            desc="Formatting train samples with chat template",
         )
         
         return selected_data
 
-    def train(self, n_samples: int, system_prompt_train: str, system_prompt_eval: str) -> Dict[str, Any]:
+    def train(self, n_samples: Optional[int], system_prompt_train: str, system_prompt_eval: str) -> Dict[str, Any]:
 
         """
         Fine-tune the model using the provided datasets and configuration.
@@ -157,7 +254,8 @@ class Trainer:
             model=model, #type: ignore
             args=training_args,
             train_dataset=selected_train_dataset,
-            eval_dataset=prepared_eval_dataset
+            eval_dataset=prepared_eval_dataset,
+            callbacks=self.callbacks
         )
         
         print(f"\nStarting training...")

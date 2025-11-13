@@ -10,7 +10,7 @@ class DataSelector(ABC):
         self.seed = seed
 
     @abstractmethod
-    def select_data(self, dataset: Any,  n_samples: int) -> datasets.Dataset:
+    def select_data(self, dataset: Any,  n_samples: Optional[int]) -> datasets.Dataset:
         """Select and return a subset of the dataset based on the strategy.
 
         Args:
