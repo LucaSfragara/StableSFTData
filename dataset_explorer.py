@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 from datasets import load_from_disk, Dataset, DatasetDict
 from datasets.utils.logging import set_verbosity_error
 from pprint import pprint
-
+from src.scoring.scorer import Scorer
 #!/usr/bin/env python3
 # /Users/lucasfragara/StableSFTData/dataset_explorer.py
 
@@ -68,15 +68,20 @@ def print_features(ds: Dataset) -> None:
 
 
 def show_rows(ds: Dataset, n: int) -> None:
+    
+
     n = max(0, min(n, len(ds)))
     if n == 0:
         print("No rows to display.")
         return
     print(f"First {n} row(s):")
+    
     for i in range(n):
         row = ds[i]
+        
         pprint(row, compact=True, sort_dicts=False)
-
+        Scorer._calculate_accuracy(row)  # type: ignore
+        break
 
 def main():
     parser = argparse.ArgumentParser(description="Explore a Hugging Face dataset saved to disk.")

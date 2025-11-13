@@ -102,14 +102,30 @@ class Scorer:
         except (ValueError, TypeError):
             return None
 
-    def _calculate_accuracy(self, example):
+    @staticmethod
+    def _calculate_accuracy(example):
         """
         This function is applied to a single example (row) from the dataset.
         It automatically detects all 'response_X' columns, compares them
         to the true answer numerically (if possible), and returns the accuracy.
         (Private method)
         """
-        
+        def _clean_and_convert_to_float(s):
+            """
+            Attempts to clean a string and convert it to a float.
+            Removes common non-numeric characters like $, ,, %, etc.
+            (Private method)
+            """
+            if not isinstance(s, str):
+                s = str(s)
+
+            cleaned_s = re.sub(r'[^\d.-]', '', s)
+            print("cleaned_s ", cleaned_s)
+            try:
+                return float(cleaned_s)
+            except (ValueError, TypeError):
+                return None
+            
         response_keys = [key for key in example.keys() if re.match(r'^response_\d+$', key)]
         num_responses = len(response_keys)
         
@@ -118,18 +134,19 @@ class Scorer:
 
         try:
             true_answer_str = example['answer'].split('####')[-1].strip()
+            print(f"True answer extracted: {true_answer_str}")
         except Exception as e:
             return {"accuracy": 0.0} 
 
-        true_num = self._clean_and_convert_to_float(true_answer_str) 
+        true_num = _clean_and_convert_to_float(true_answer_str) 
 
         correct_count = 0
         for response_key in response_keys:
             
             generated_response_str = str(example[response_key]).strip()
             
-            gen_num = self._clean_and_convert_to_float(generated_response_str) # <-- Call internal method
-
+            gen_num = _clean_and_convert_to_float(generated_response_str) # <-- Call internal method
+            print(f"Generated response for {response_key}: {generated_response_str} -> Parsed number: {gen_num}")
             is_correct = False
             
             if true_num is not None and gen_num is not None:
