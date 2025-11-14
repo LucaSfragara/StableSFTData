@@ -6,17 +6,19 @@ from src.train import (
     RandomDataSelector,
     ThresholdDataSelector
 )
-from datasets import load_dataset, Dataset, DatasetDict
+from datasets import load_dataset, load_from_disk
 from src.prompts import GSM8K_FINE_TUNE, GSM8K
-
+from datasets.config import HF_DATASETS_CACHE
 from src.train.callbacks import GenerationEvaluationCallback
+import os 
 
 def main():
   
     model = HFModel("Qwen/Qwen3-0.6B")
 
     # Load GSM8K dataset
-    dataset_dict = load_dataset("gsm8k", "main")
+    dataset_dict = load_from_disk(os.path.join(HF_DATASETS_CACHE, "gsm8k_processed"))
+    
     train_dataset = dataset_dict["train"]
     eval_dataset = dataset_dict["test"]
     
@@ -31,7 +33,7 @@ def main():
         use_lora=True,  # Use LoRA for efficient fine-tuning
         lora_r=16,
         logging_steps=20,
-        eval_steps=1,
+        eval_steps=20,
     )
     
     # 4. Select training strategy
@@ -56,8 +58,10 @@ def main():
     
     eval_callback = GenerationEvaluationCallback(
         trainer_instance=trainer,
-        eval_dataset=eval_dataset,
-        num_eval_samples=1,
+        eval_dataset=eval_dataset, # type: ignore
+        num_eval_samples=100,
+        enable_thinking=False,
+        max_new_tokens=256
     )
     
     trainer.callbacks.append(eval_callback)

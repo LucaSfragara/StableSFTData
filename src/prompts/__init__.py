@@ -1,5 +1,5 @@
 GSM8K = """You are a helpful assistant. 
-        Answer these grade school math questions. Be as concise as you can. Your answer should be in the final line of your response, 
+        Answer these grade school math questions. Reason through your answer. Your answer should be in the final line of your response, 
         prefixed by "Answer:".
         """  
         

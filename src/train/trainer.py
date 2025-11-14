@@ -11,6 +11,7 @@ from transformers import TrainingArguments, EvalPrediction
 import re
 import numpy as np
 from src.prompts import GSM8K_FINE_TUNE, GSM8K
+from src.utils.parser import Parser
 
 class Trainer: 
     
@@ -80,11 +81,12 @@ class Trainer:
         
         return None
     
-
     def evaluate_generation_quality(
         self, 
         eval_dataset: datasets.Dataset,
-        num_samples: int
+        num_samples: int, 
+        max_new_tokens: int = 512,
+        enable_thinking: bool = False
     ) -> Dict[str, float]:
         """
         Evaluate the model's generation quality by generating answers
@@ -104,42 +106,50 @@ class Trainer:
         correct = 0
         total = 0
         
-        for example in eval_subset:
-            question = example["question"]
-            true_answer = self._extract_answer(example["answer"])
+        batch_size = getattr(self.config, "batch_size", 1)
+        
+        for start in range(0, len(eval_subset), batch_size):
             
+            indices = list(range(start, min(start + batch_size, len(eval_subset))))
+            batch = eval_subset.select(indices)
+
+            conversations = [
+                [
+                    {"role": "system", "content": GSM8K},
+                    {"role": "user", "content": ex["question"]} #type: ignore
+                ]
+                for ex in batch
+            ]
+
+            try:
+                generated_batch = self.model.chat(
+                    conversations,
+                    max_new_tokens=max_new_tokens,
+                    enable_thinking=enable_thinking,
+                    temperature=0.0
+                )
+            except Exception as e:
+                print(f"Batch generation error at indices {indices}: {e}")
+                continue
+
+        for ex, generated in zip(batch, generated_batch):
+            question = ex["question"]
+            true_answer = ex["answer_num"]
+
             print(f"\nQuestion: {question}")
             print(f"True Answer: {true_answer}")
-            
-            if true_answer is None:
-                continue
-            
-            # Generate answer
-            try:
-                conversations = [[
-                    {"role": "system", "content": GSM8K},
-                    {"role": "user", "content": question}
-                ]]
-                
-                generated = self.model.chat(conversations,
-                                            max_new_tokens=512, 
-                                            enable_thinking=True, 
-                                            temperature=0.0)[0]
-                pred_answer = self._extract_answer(generated)
-            
-                print(f"Generated Answer: {generated}")
-                print(f"Predicted Answer: {pred_answer}")
-                if pred_answer is not None and pred_answer == true_answer:
-                    correct += 1
-                
-                total += 1
-                
-            except Exception as e:
-                print(f"Error generating for sample: {e}")
-                continue
+
+            pred_answer = Parser.extract_generated_number(generated)
+
+            print(f"Generated Answer: {generated}")
+            print(f"Predicted Answer: {pred_answer}")
+
+            if pred_answer is not None and pred_answer == true_answer:
+                correct += 1
+            total += 1
         
         accuracy = correct / total if total > 0 else 0.0
-        
+           
         metrics = {
             "generation_accuracy": accuracy,
             "correct": correct,
@@ -222,7 +232,7 @@ class Trainer:
             # Logging and saving
             logging_steps=self.config.logging_steps,
             eval_steps=self.config.eval_steps if self.eval_dataset else None,
-            save_steps=self.config.save_steps,
+            save_steps=self.config.save_every_n_steps * self.config.eval_steps if self.eval_dataset else None,
             save_total_limit=self.config.save_total_limit,
             
             # Evaluation

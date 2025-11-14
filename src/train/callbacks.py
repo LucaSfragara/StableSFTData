@@ -1,3 +1,4 @@
+from math import e
 from transformers import TrainerCallback, TrainingArguments, TrainerState, TrainerControl
 from typing import Optional
 import datasets
@@ -14,7 +15,9 @@ class GenerationEvaluationCallback(TrainerCallback):
         trainer_instance: Trainer,
         eval_dataset: datasets.Dataset,
         num_eval_samples: int = 100,
-        eval_every_n_steps: Optional[int] = None
+        eval_every_n_steps: Optional[int] = None,
+        max_new_tokens: int = 512,
+        enable_thinking: bool = False,
     ):
         """
         Args:
@@ -27,10 +30,11 @@ class GenerationEvaluationCallback(TrainerCallback):
         self.eval_dataset = eval_dataset
         self.num_eval_samples = num_eval_samples
         self.eval_every_n_steps = eval_every_n_steps
-        
+        self.max_new_tokens = max_new_tokens
         self.best_accuracy = 0.0
         self.eval_history = []
-    
+        self.enable_thinking = enable_thinking
+        
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, 
                    control: TrainerControl, **kwargs):
         """
@@ -53,7 +57,9 @@ class GenerationEvaluationCallback(TrainerCallback):
         # Run your custom evaluation
         eval_metrics = self.trainer_instance.evaluate_generation_quality(
             eval_dataset=self.eval_dataset,
-            num_samples=self.num_eval_samples
+            num_samples=self.num_eval_samples,
+            max_new_tokens=self.max_new_tokens,
+            enable_thinking=self.enable_thinking
         )
         
         # Track best accuracy

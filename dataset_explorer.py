@@ -6,9 +6,7 @@ from datasets import load_from_disk, Dataset, DatasetDict
 from datasets.utils.logging import set_verbosity_error
 from pprint import pprint
 from src.scoring.scorer import Scorer
-#!/usr/bin/env python3
-# /Users/lucasfragara/StableSFTData/dataset_explorer.py
-
+import numpy as np
 
 set_verbosity_error()
 
@@ -45,7 +43,7 @@ def load_local_dataset(path: str):
         return None
 
 
-def summarize_dataset(ds) -> None:
+def summarize_dataset(ds: Dataset) -> None:
     if isinstance(ds, DatasetDict):
         print("Loaded DatasetDict")
         print(f"Splits: {', '.join([f'{k}({len(v)})' for k, v in ds.items()])}")
@@ -54,8 +52,10 @@ def summarize_dataset(ds) -> None:
         print(f"Rows: {len(ds)}")
     else:
         print(f"Unknown dataset type: {type(ds)}")
-
-
+    
+    if "accuracy" in ds.features:
+        print("Mean Accuracy: ", np.mean(ds["accuracy"]))
+   
 def print_features(ds: Dataset) -> None:
     try:
         feats = ds.features
@@ -69,7 +69,6 @@ def print_features(ds: Dataset) -> None:
 
 def show_rows(ds: Dataset, n: int) -> None:
     
-
     n = max(0, min(n, len(ds)))
     if n == 0:
         print("No rows to display.")

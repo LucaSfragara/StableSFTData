@@ -99,7 +99,7 @@ class HFModel:
             do_sample=True if temperature > 0 else False,
             use_cache=True, 
             temperature=temperature, 
-            top_p=0.9,
+            top_p=0.9 if temperature > 0 else None,
             pad_token_id=self.tokenizer.eos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
             num_return_sequences=num_return_sequences
@@ -112,7 +112,7 @@ class HFModel:
         sequences = out.view(B, K, -1) #type: ignore
         input_token_len = batch_inputs.input_ids.shape[1] #length of input prompt tokens
         generated_ids = sequences[:, :, input_token_len:]  #get only generated tokens
-        print("generated_ids shape: ", generated_ids.shape)
+       
         generated_ids = generated_ids.reshape(B * K, -1)  #reshape to (B*K, seq_len)
         decoded_texts = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
@@ -120,7 +120,8 @@ class HFModel:
             decoded_texts[b*K:(b+1)*K]
             for b in range(B)
         ]
-
+        if K == 1:
+            return [g[0] for g in grouped]
         return grouped  # [B,K strings]
 
     @torch.no_grad()
