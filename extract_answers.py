@@ -24,14 +24,14 @@ def process_dataset(
     source_col: str = "answer",
     target_col: str = "answer_num",
     num_proc: int = 1,
-) -> DatasetDict:
+):
     
     ds = load_dataset(dataset_name, config_name)
     # Replace/insert target_col with extracted answer
     mapped = ds.map(
         lambda ex: map_example(ex, source_col, target_col),
-        desc=f"Extracting final answers into '{target_col}'",
-        num_proc=num_proc if num_proc and num_proc > 1 else None,
+        desc=f"Extracting final answers into '{target_col}'", # type: ignore
+        num_proc=num_proc if num_proc and num_proc > 1 else None, # type: ignore
     )
     return mapped
 
@@ -39,8 +39,7 @@ def process_dataset(
 def save_to_hf_cache(ds: DatasetDict, dataset_name: str, config_name: str, suffix: str = "answers") -> str:
     out_dir = os.path.join(
         HF_DATASETS_CACHE,
-        "processed",
-        f"{dataset_name}_{config_name}_{suffix}",
+        f"{dataset_name}_processed",
     )
     os.makedirs(out_dir, exist_ok=True)
     ds.save_to_disk(out_dir)
@@ -54,7 +53,7 @@ def main():
     parser.add_argument("--source-col", type=str, default="answer", help="Source column containing rationale/solution")
     parser.add_argument("--target-col", type=str, default="answer_num", help="Target column name for extracted answer")
     parser.add_argument("--num-proc", type=int, default=0, help="Parallel workers for map (0/1 = no parallelism)")
-    parser.add_argument("--suffix", type=str, default="with_num_answer", help="Suffix for saved dataset directory")
+    parser.add_argument("--suffix", type=str, default="", help="Suffix for saved dataset directory")
     args = parser.parse_args()
 
     num_proc = args.num_proc if args.num_proc and args.num_proc > 1 else None
@@ -63,7 +62,7 @@ def main():
         config_name=args.config,
         source_col=args.source_col,
         target_col=args.target_col,
-        num_proc=num_proc,
+        num_proc=num_proc, #type: ignore
     )
     out_dir = save_to_hf_cache(ds, args.dataset, args.config, args.suffix)
     print(f"Saved processed dataset to: {out_dir}")

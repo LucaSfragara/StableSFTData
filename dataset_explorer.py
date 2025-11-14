@@ -80,7 +80,7 @@ def show_rows(ds: Dataset, n: int) -> None:
         row = ds[i]
         
         pprint(row, compact=True, sort_dicts=False)
-        Scorer._calculate_accuracy(row)  # type: ignore
+
         break
 
 def main():

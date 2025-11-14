@@ -15,3 +15,6 @@ module load miniforge/24.3.0-0
 # 4. Activate your environment
 conda activate <env_name>
 
+
+# 5. Extract answer from GSM8K and save result
+python extract_answers.py

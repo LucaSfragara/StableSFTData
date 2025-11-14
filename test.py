@@ -3,6 +3,8 @@ from src.data.loader import load_gsm8k_dataset
 from src.core.types import Dataset
 from src.scoring.scorer import Scorer
 import datasets
+from datasets.config import HF_DATASETS_CACHE
+import os
 
 def test_hfmodel_generation():
     model_name = "Qwen/Qwen3-0.6B"
@@ -46,12 +48,13 @@ def score():
     
     model_name = "Qwen/Qwen3-0.6B"
     model = HFModel(model_name)
-    dataset = datasets.load_dataset("gsm8k", 'main')['train']
+    #dataset = datasets.load_dataset("gsm8k_processed")['train']
+    dataset = datasets.load_from_disk(os.path.join(HF_DATASETS_CACHE, "gsm8k_processed"))['train']
    # dataset_d = Dataset.from_list([sample.__dict__ for sample in dataset])
 
     scorer = Scorer(model,
-                    dataset.select(range(10)), #type: ignore
-                    batch_size=10, 
+                    dataset.select(range(1)), #type: ignore
+                    batch_size=1, 
                     responses_per_sample=4,
                     max_new_token=512,
                     temperature=0.2,

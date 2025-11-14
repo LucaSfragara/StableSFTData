@@ -5,6 +5,7 @@ import src.prompts as prompts
 import os
 from multiprocessing import set_start_method
 import re  
+from src.utils.parser import Parser
 
 class Scorer:
 
@@ -33,13 +34,10 @@ class Scorer:
         """
         Score entire dataset in batches, calculate accuracy, and save the resulting dataset.
         """
-        #### TO REMOVE: For testing, we will only score a subset of the dataset
     
         print(f"Scoring dataset {self.dataset.info.dataset_name} with {len(self.dataset)} samples using batch size {self.batch_size}...")
         
-        #print(f"Scoring dataset {self.dataset.info.dataset_name} with {len(self.dataset)} samples using batch size {self.batch_size}...")
-        ### TO CHANGE NAME OF DATASET
-        
+   
         result_dataset = self.dataset.map(
             self._score_batch,
             batched=True,
@@ -85,79 +83,36 @@ class Scorer:
 
         return output_data
 
-
-    def _clean_and_convert_to_float(self, s):
-        """
-        Attempts to clean a string and convert it to a float.
-        Removes common non-numeric characters like $, ,, %, etc.
-        (Private method)
-        """
-        if not isinstance(s, str):
-            s = str(s)
-
-        cleaned_s = re.sub(r'[^\d.-]', '', s)
-        
-        try:
-            return float(cleaned_s)
-        except (ValueError, TypeError):
-            return None
-
-    @staticmethod
-    def _calculate_accuracy(example):
+    def _calculate_accuracy(self, example):
         """
         This function is applied to a single example (row) from the dataset.
         It automatically detects all 'response_X' columns, compares them
         to the true answer numerically (if possible), and returns the accuracy.
         (Private method)
         """
-        def _clean_and_convert_to_float(s):
-            """
-            Attempts to clean a string and convert it to a float.
-            Removes common non-numeric characters like $, ,, %, etc.
-            (Private method)
-            """
-            if not isinstance(s, str):
-                s = str(s)
-
-            cleaned_s = re.sub(r'[^\d.-]', '', s)
-            print("cleaned_s ", cleaned_s)
-            try:
-                return float(cleaned_s)
-            except (ValueError, TypeError):
-                return None
-            
+       
         response_keys = [key for key in example.keys() if re.match(r'^response_\d+$', key)]
         num_responses = len(response_keys)
         
         if num_responses == 0:
             return {"accuracy": 0.0} 
 
-        try:
-            true_answer_str = example['answer'].split('####')[-1].strip()
-            print(f"True answer extracted: {true_answer_str}")
-        except Exception as e:
-            return {"accuracy": 0.0} 
 
-        true_num = _clean_and_convert_to_float(true_answer_str) 
-
+        true_num = float(example["answer_num"])
+        print("true_num ", true_num)
+        
         correct_count = 0
         for response_key in response_keys:
             
             generated_response_str = str(example[response_key]).strip()
             
-            gen_num = _clean_and_convert_to_float(generated_response_str) # <-- Call internal method
+            gen_num = Parser.extract_generated_number(generated_response_str)
             print(f"Generated response for {response_key}: {generated_response_str} -> Parsed number: {gen_num}")
-            is_correct = False
+  
             
-            if true_num is not None and gen_num is not None:
+            if gen_num is not None:
                 if true_num == gen_num:
-                    is_correct = True
-            else: 
-                if true_answer_str == generated_response_str:
-                    is_correct = True
+                    correct_count += 1
             
-            if is_correct:
-                correct_count += 1
-                
         accuracy = correct_count / num_responses
         return {"accuracy": accuracy} 

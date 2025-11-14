@@ -18,8 +18,8 @@ class Parser:
         if tags:
             return float(tags[-1].strip().strip(".").replace(",", "").strip())
         
-
-    
+        
+        
 if __name__ == "__main__":
     
     sample_generated_text = """
