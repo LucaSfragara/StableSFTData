@@ -81,7 +81,6 @@ def show_rows(ds: Dataset, n: int) -> None:
         
         pprint(row, compact=True, sort_dicts=False)
 
-        break
 
 def main():
     parser = argparse.ArgumentParser(description="Explore a Hugging Face dataset saved to disk.")

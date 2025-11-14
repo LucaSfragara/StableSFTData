@@ -56,7 +56,12 @@ class HFModel:
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
     
     @torch.no_grad()
-    def chat(self, conversations: List[List[Dict[str, str]]], max_new_tokens: int, temperature:float, enable_thinking = False ) -> List[str]:
+    def chat(self, 
+             conversations: List[List[Dict[str, str]]],
+             max_new_tokens: int,
+             temperature:float,
+             enable_thinking = False, 
+             num_return_sequences: int = 1) -> List[str]:
         """
         Generates responses for a batch of conversations in parallel.
 
@@ -68,7 +73,9 @@ class HFModel:
                              [{"role": "system", "content": "Be a pirate."}, {"role": "user", "content": "How are you?"}]
                          ]
             max_new_tokens: The maximum number of new tokens to generate for each response.
-
+            temperature: Sampling temperature. Higher values lead to more diverse outputs.
+            enable_thinking: Whether to enable "thinking" mode in the chat template.
+            num_return_sequences: Number of responses to generate per conversation.
         Returns:
             A list of generated response strings.
         """
@@ -95,30 +102,26 @@ class HFModel:
             top_p=0.9,
             pad_token_id=self.tokenizer.eos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
+            num_return_sequences=num_return_sequences
         )
       
-        """
-        end_time = torch.cuda.Event(enable_timing=True)
-        end_time.record()
-        torch.cuda.synchronize()
 
-        elapsed_time = start_time.elapsed_time(end_time) / 1000  # convert to
-        end_tokens = out.shape[1]
-        tokens_generated = end_tokens 
-        tokens_per_second = tokens_generated / elapsed_time
-                
-        print(f"\nGeneration Stats:")
-        print(f"Tokens generated: {tokens_generated}")
-        print(f"Time taken: {elapsed_time:.2f} seconds")
-        print(f"Tokens per second: {tokens_per_second:.2f}")
-        """
+        B = batch_inputs.input_ids.shape[0]
+        K = num_return_sequences
         
+        sequences = out.view(B, K, -1) #type: ignore
         input_token_len = batch_inputs.input_ids.shape[1] #length of input prompt tokens
-        generated_ids = out[:, input_token_len:]  #get only generated tokens
-    
+        generated_ids = sequences[:, :, input_token_len:]  #get only generated tokens
+        print("generated_ids shape: ", generated_ids.shape)
+        generated_ids = generated_ids.reshape(B * K, -1)  #reshape to (B*K, seq_len)
         decoded_texts = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
-        return [text.strip() for text in decoded_texts]
+        grouped = [
+            decoded_texts[b*K:(b+1)*K]
+            for b in range(B)
+        ]
+
+        return grouped  # [B,K strings]
 
     @torch.no_grad()
     def gold_CE(self, prompt: str, gold: str) -> tuple[float, str, int]: #TODO: make this work for batched inputs

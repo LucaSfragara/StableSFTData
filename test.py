@@ -53,12 +53,12 @@ def score():
    # dataset_d = Dataset.from_list([sample.__dict__ for sample in dataset])
 
     scorer = Scorer(model,
-                    dataset.select(range(1)), #type: ignore
-                    batch_size=1, 
-                    responses_per_sample=4,
+                    dataset, #type: ignore
+                    batch_size=64, 
+                    responses_per_sample=5,
                     max_new_token=512,
                     temperature=0.2,
-                    enable_thinking=True)
+                    enable_thinking=False)
     scorer.score()
 
 if __name__ == "__main__":

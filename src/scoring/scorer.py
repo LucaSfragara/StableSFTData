@@ -69,21 +69,25 @@ class Scorer:
         ]
         
         output_data = {}
-        # we generate 20 responses for each question (range(20) -> 0 to 19)
-        for i in range(self.responses_per_samples):
-            
-            responses = self.model.chat(
-                conversations, 
-                max_new_tokens=self.max_new_token, 
+
+        all_responses = self.model.chat(
+                conversations,
+                max_new_tokens=self.max_new_token,
                 temperature=self.temperature,
-                enable_thinking=self.enable_thinking
-            )
+                enable_thinking=self.enable_thinking,
+                num_return_sequences=self.responses_per_samples
+        ) # [B,K]
+
+        for k in range(self.responses_per_samples):
+            output_data[f"response_{k}"] = []
             
-            output_data[f"response_{i}"] = responses 
+            for b in range(len(all_responses)):
+                output_data[f"response_{k}"].append(all_responses[b][k])
 
         return output_data
 
     def _calculate_accuracy(self, example):
+        
         """
         This function is applied to a single example (row) from the dataset.
         It automatically detects all 'response_X' columns, compares them
@@ -99,7 +103,6 @@ class Scorer:
 
 
         true_num = float(example["answer_num"])
-        print("true_num ", true_num)
         
         correct_count = 0
         for response_key in response_keys:
@@ -107,7 +110,6 @@ class Scorer:
             generated_response_str = str(example[response_key]).strip()
             
             gen_num = Parser.extract_generated_number(generated_response_str)
-            print(f"Generated response for {response_key}: {generated_response_str} -> Parsed number: {gen_num}")
   
             
             if gen_num is not None:
