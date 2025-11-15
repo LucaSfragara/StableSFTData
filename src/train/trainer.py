@@ -10,8 +10,11 @@ from typing import Dict, Any, Optional
 from transformers import TrainingArguments, EvalPrediction
 import re
 import numpy as np
-from src.prompts import GSM8K_FINE_TUNE, GSM8K
+from src.prompts import GSM8K_FINE_TUNE
 from src.utils.parser import Parser
+import json
+from trl import DataCollatorForCompletionOnlyLM
+from src.utils.prompt_builder import build_prompt
 
 class Trainer: 
     
@@ -21,7 +24,8 @@ class Trainer:
                  eval_dataset: datasets.Dataset,
                  data_selector: DataSelector,
                  config: TrainingConfig, 
-                 callbacks: Optional[list] = None):
+                 callbacks: Optional[list] = None, 
+                 use_custom_chat_template: bool = False):
         
         self.model = model
         self.train_dataset = train_dataset
@@ -33,29 +37,31 @@ class Trainer:
         
         self.output_dir = os.path.join(config.output_dir, config.run_name or "default")
         self.callbacks = callbacks or []
+        self.use_custom_chat_template = use_custom_chat_template
+
         
         os.makedirs(self.output_dir, exist_ok=True)
         
     
     def _setup_lora(self):
-        """Configure model for LoRA fine-tuning if enabled in config."""
         if not self.config.use_lora:
             return self.model.model
-        
-        model = prepare_model_for_kbit_training(self.model.model)
-        
-        lora_config = LoraConfig(
-            r = self.config.lora_r,
-            lora_alpha = self.config.lora_alpha,
-            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"],
-            lora_dropout = self.config.lora_dropout,
-            bias = "none",
-            task_type = "CAUSAL_LM"
-            )
 
-        model = get_peft_model(model, lora_config)
-        print("LoRA configuration applied to the model.")
-        model.print_trainable_parameters() 
+        base_model = self.model.model
+        base_model = prepare_model_for_kbit_training(base_model)
+        base_model.config.use_cache = False
+
+        lora_config = LoraConfig(
+            r=self.config.lora_r,
+            lora_alpha=self.config.lora_alpha,
+            target_modules=["query_key_value", "dense", "dense_h_to_4h", "dense_4h_to_h"],
+            lora_dropout=self.config.lora_dropout,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+
+        model = get_peft_model(base_model, lora_config)
+        model.print_trainable_parameters()
         
         return model
 
@@ -86,7 +92,9 @@ class Trainer:
         eval_dataset: datasets.Dataset,
         num_samples: int, 
         max_new_tokens: int = 512,
-        enable_thinking: bool = False
+        enable_thinking: bool = False, 
+        step: int = 0,
+        use_cache: bool = True
     ) -> Dict[str, float]:
         """
         Evaluate the model's generation quality by generating answers
@@ -112,10 +120,11 @@ class Trainer:
             
             indices = list(range(start, min(start + batch_size, len(eval_subset))))
             batch = eval_subset.select(indices)
-
+            
+        
             conversations = [
                 [
-                    {"role": "system", "content": GSM8K},
+                    {"role": "system", "content": GSM8K_FINE_TUNE},
                     {"role": "user", "content": ex["question"]} #type: ignore
                 ]
                 for ex in batch
@@ -126,27 +135,39 @@ class Trainer:
                     conversations,
                     max_new_tokens=max_new_tokens,
                     enable_thinking=enable_thinking,
-                    temperature=0.0
+                    temperature=0.0, 
+                    use_custom_chat_template=self.use_custom_chat_template, 
+                    use_cache=use_cache
                 )
             except Exception as e:
                 print(f"Batch generation error at indices {indices}: {e}")
                 continue
 
-        for ex, generated in zip(batch, generated_batch):
-            question = ex["question"]
-            true_answer = ex["answer_num"]
+            for ex, generated in zip(batch, generated_batch):
+                question = ex["question"] #type: ignore
+                true_answer = ex["answer_num"] #type: ignore
 
-            print(f"\nQuestion: {question}")
-            print(f"True Answer: {true_answer}")
+                # Persist generated text for monitoring
+                pred_answer = Parser.extract_generated_number(generated)
+                
+                try:
+                    log_record = {
+                        "question": question,
+                        "true_answer": true_answer,
+                        "predicted_answer": pred_answer,
+                        "generated_text": generated,
+                    }
 
-            pred_answer = Parser.extract_generated_number(generated)
+                    log_path = os.path.join(self.output_dir, f"generation_monitor_{step}.jsonl")
 
-            print(f"Generated Answer: {generated}")
-            print(f"Predicted Answer: {pred_answer}")
+                    with open(log_path, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(log_record, ensure_ascii=False) + "\n")
+                except Exception as e:
+                    print(f"Warning: failed to write generation log: {e}")
 
-            if pred_answer is not None and pred_answer == true_answer:
-                correct += 1
-            total += 1
+                if pred_answer is not None and pred_answer == true_answer:
+                    correct += 1
+                total += 1
         
         accuracy = correct / total if total > 0 else 0.0
            
@@ -164,20 +185,28 @@ class Trainer:
     # Format as conversations
     def _format_sample(self, example, system_prompt: str) -> Dict[str, str]:
         messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
         
-        messages.extend([
-            {"role": "user", "content": example["question"]},
-            {"role": "assistant", "content": example["answer"]}
-        ])
-        
-        # Apply chat template
-        text = self.model.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=False
-        )
+        if not self.use_custom_chat_template:
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            
+            messages.extend([
+                {"role": "user", "content": example["question"]},
+                {"role": "assistant", "content": example["answer"]}
+            ])
+            
+            # Apply chat template
+            text = self.model.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=False
+            )
+        else:
+            text = build_prompt(
+                system_prompt=system_prompt,
+                question=example["question"],
+                answer=example["answer"] if "answer" in example else None,
+            )
         
         return {"text": text}
 
@@ -200,11 +229,12 @@ class Trainer:
         selected_data = selected_data.map(
             lambda example: self._format_sample(example, system_prompt),
             desc="Formatting train samples with chat template",
+         
         )
         
         return selected_data
 
-    def train(self, n_samples: Optional[int], system_prompt_train: str, system_prompt_eval: str) -> Dict[str, Any]:
+    def train(self, n_samples: Optional[int], system_prompt: str) -> Dict[str, Any]:
 
         """
         Fine-tune the model using the provided datasets and configuration.
@@ -246,26 +276,35 @@ class Trainer:
             
             # Misc
             report_to=["tensorboard"],
-            remove_unused_columns=False,
+            remove_unused_columns=True,
+            
         )
         
         selected_train_dataset = self.prepare_train_dataset(
             self.train_dataset,
             n_samples=n_samples,
-            system_prompt=system_prompt_train
+            system_prompt=system_prompt
         )
       
         prepared_eval_dataset = self.eval_dataset.map(
-            lambda example: self._format_sample(example, system_prompt_eval),
+            lambda example: self._format_sample(example, system_prompt),
             desc="Formatting eval examples",
         )
-                
+        
+        response_template =  "<|assistant|>\n"
+        data_collator = DataCollatorForCompletionOnlyLM(
+            tokenizer=self.model.tokenizer,
+            response_template=response_template,
+            return_tensors="pt",
+        )
+        
         SFT_trainer = SFTTrainer(
             model=model, #type: ignore
             args=training_args,
             train_dataset=selected_train_dataset,
             eval_dataset=prepared_eval_dataset,
-            callbacks=self.callbacks
+            callbacks=self.callbacks, 
+            data_collator=data_collator
         )
         
         print(f"\nStarting training...")
@@ -277,8 +316,8 @@ class Trainer:
         train_result = SFT_trainer.train()
 
         # Save final model
-        #SFT_trainer.save_model()
-        #self.model.tokenizer.save_pretrained(self.output_dir)
+        SFT_trainer.save_model()
+        self.model.tokenizer.save_pretrained(self.output_dir)
         
         print(f"\nTraining complete! Model saved to: {self.output_dir}")
         

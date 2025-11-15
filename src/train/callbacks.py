@@ -59,7 +59,8 @@ class GenerationEvaluationCallback(TrainerCallback):
             eval_dataset=self.eval_dataset,
             num_samples=self.num_eval_samples,
             max_new_tokens=self.max_new_tokens,
-            enable_thinking=self.enable_thinking
+            enable_thinking=self.enable_thinking, 
+            step = state.global_step,
         )
         
         # Track best accuracy

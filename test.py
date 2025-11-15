@@ -5,9 +5,12 @@ from src.scoring.scorer import Scorer
 import datasets
 from datasets.config import HF_DATASETS_CACHE
 import os
+from src.prompts import GSM8K_FINE_TUNE, GSM8K
 
 def test_hfmodel_generation():
-    model_name = "Qwen/Qwen3-0.6B"
+    #model_name = "Qwen/Qwen3-0.6B"
+    model_name = "allenai/open-instruct-pythia-6.9b-tulu"
+    
     model = HFModel(model_name)
     dataset = load_gsm8k_dataset("train")
     prompt = dataset[0].question
@@ -16,23 +19,25 @@ def test_hfmodel_generation():
     conversations_batch = [
         # Conversation 1
         [
-            {"role": "system", "content": "You are a math expert."},
-            {"role": "user", "content": "Natalia sold 48 clips in April and half as many in May. How many clips did she sell in total?"}
-        ],
-        """# Conversation 2
-        [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "What is the capital of France?"}
-        ],
-        # Conversation 3
-        [
-            {"role": "system", "content": "You are a creative writer."},
-            {"role": "user", "content": "Write a single sentence about a robot who discovers music."}
-        ]"""
+            {"role": "system", "content": GSM8K},
+            {"role": "user", "content": "Benny threw bologna at his balloons.  He threw two pieces of bologna at each red balloon and three pieces of bologna at each yellow balloon.  If Benny threw 58 pieces of bologna at a bundle of red and yellow balloons, and twenty of the balloons were red, then how many of the balloons in the bundle were yellow?"}
+        ]
     ]
     
-    generated_text = model.chat(conversations_batch, max_new_tokens=200, temperature=0)
-    #generated_text = model.generate(prompt="The capital of France is", max_length=20)
+    generated_text = model.chat(conversations_batch,
+                                max_new_tokens=400,
+                                temperature=0, 
+                                use_custom_chat_template=True)
+    
+    #generated_text = model.generate(
+    #    prompt="""
+    #            <|user|>
+    #            You are a math assistant solving simple math question. RRespond to the question by thinking step by step. Question: 
+    #            Natalia sold 48 clips in April and half as many in May. How many clips did she sell in total?,
+    #            <|assistant|> \n
+    #            """,
+    #    max_length=500)
+    
     print(f"Generated text: {generated_text}") 
 
 def test_hfmodel_gold_CE():
@@ -64,8 +69,8 @@ def score():
 if __name__ == "__main__":
 
     #print("Testing HFModel...")
-    #test_hfmodel_generation()
-    score()
+    test_hfmodel_generation()
+    #score()
     
     #test_hfmodel_gold_CE()
    #test_hfmodel_generation()

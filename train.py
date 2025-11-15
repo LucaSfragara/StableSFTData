@@ -7,15 +7,16 @@ from src.train import (
     ThresholdDataSelector
 )
 from datasets import load_dataset, load_from_disk
-from src.prompts import GSM8K_FINE_TUNE, GSM8K
+from src.prompts import GSM8K_FINE_TUNE
 from datasets.config import HF_DATASETS_CACHE
 from src.train.callbacks import GenerationEvaluationCallback
-import os 
+import os
+from src.utils.prompt_builder import build_prompt
 
 def main():
   
-    model = HFModel("Qwen/Qwen3-0.6B")
-
+    #model = HFModel("Qwen/Qwen3-0.6B")
+    model = HFModel("allenai/open-instruct-pythia-6.9b-tulu")
     # Load GSM8K dataset
     dataset_dict = load_from_disk(os.path.join(HF_DATASETS_CACHE, "gsm8k_processed"))
     
@@ -26,14 +27,15 @@ def main():
     config = TrainingConfig(
         output_dir="checkpoints",
         run_name="gsm8k_default_run",
-        learning_rate=2e-5,
-        num_epochs=1,
+        learning_rate=3e-5,
+        num_epochs=4,
         batch_size=64,
         gradient_accumulation_steps=1,
         use_lora=True,  # Use LoRA for efficient fine-tuning
         lora_r=16,
         logging_steps=20,
-        eval_steps=20,
+        eval_steps=100,
+        gradient_checkpointing=True,
     )
     
     # 4. Select training strategy
@@ -53,7 +55,8 @@ def main():
                       train_dataset=train_dataset, #type: ignore
                       eval_dataset=eval_dataset, #type: ignore
                       data_selector=selector,
-                      config=config)
+                      config=config, 
+                      use_custom_chat_template=True)
     
     
     eval_callback = GenerationEvaluationCallback(
@@ -68,8 +71,7 @@ def main():
     # 6. Train!
     results = trainer.train(
         n_samples=None, 
-        system_prompt_train=GSM8K_FINE_TUNE,
-        system_prompt_eval=GSM8K
+        system_prompt=GSM8K_FINE_TUNE,
     )
     
     print("\nTraining Results:")
@@ -82,7 +84,8 @@ def main():
     
     eval_metrics = trainer.evaluate_generation_quality(
         eval_dataset=eval_dataset,  # type: ignore
-        num_samples=1  # Evaluate on 100 random samples
+        num_samples=1000,  # Evaluate on 100 random samples
+        use_cache = False
     )
     
     print("\nFinal Evaluation Metrics:")

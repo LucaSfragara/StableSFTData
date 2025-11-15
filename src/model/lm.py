@@ -3,6 +3,15 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import gc
 from typing import List, Dict
+from src.utils.prompt_builder import build_prompt
+from transformers import BitsAndBytesConfig
+
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,  # or torch.float16
+)
 class HFModel:  
     def __init__(self, model_name: str):
 
@@ -11,9 +20,14 @@ class HFModel:
             model_name,
             dtype=torch.bfloat16,
             low_cpu_mem_usage=True, 
+            quantization_config=bnb_config,
             device_map="auto", 
             attn_implementation="sdpa"
         ).eval()
+        
+        self.model.config.use_cache = False
+        self.model.gradient_checkpointing_enable()
+        
         print(f"Model device: {self.model.device}")
 
         if self.model.device == "cpu":
@@ -21,10 +35,10 @@ class HFModel:
 
         self.tokenizer  = AutoTokenizer.from_pretrained(model_name, use_fast=True)
       
-        """if self.tokenizer.pad_token is None:
+        if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
-        """
+    
     
     @torch.no_grad()
     def generate(self, prompt: str, max_length: int = 50, temperature: float = 0) -> str:
@@ -36,23 +50,7 @@ class HFModel:
         
         #start_time.record()
         outputs = self.model.generate(**inputs, max_length=max_length) #TODO: add other generation parameters as needed
-        """
-        end_time = torch.cuda.Event(enable_timing=True)
-        end_time.record()
-        torch.cuda.synchronize()
-        
-        elapsed_time = start_time.elapsed_time(end_time) / 1000  # convert to
-        end_tokens = outputs.shape[1]
-        tokens_generated = end_tokens 
-        tokens_per_second = tokens_generated / elapsed_time
-        
-        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        print(f"\nGeneration Stats:")
-        print(f"Tokens generated: {tokens_generated}")
-        print(f"Time taken: {elapsed_time:.2f} seconds")
-        print(f"Tokens per second: {tokens_per_second:.2f}")
-        """
+    
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
     
     @torch.no_grad()
@@ -61,7 +59,9 @@ class HFModel:
              max_new_tokens: int,
              temperature:float,
              enable_thinking = False, 
-             num_return_sequences: int = 1) -> List[str]:
+             num_return_sequences: int = 1, 
+             use_custom_chat_template: bool = False, 
+             use_cache: bool = True) -> List[str]:
         """
         Generates responses for a batch of conversations in parallel.
 
@@ -82,12 +82,24 @@ class HFModel:
         torch.cuda.empty_cache()
         gc.collect()
         #print(conversations)
-        prompts = [
-            self.tokenizer.apply_chat_template(
-                conv, add_generation_prompt=True, tokenize=False, enable_thinking=enable_thinking
-            ) for conv in conversations
-        ]
-        
+        if not use_custom_chat_template:
+            prompts = [
+                self.tokenizer.apply_chat_template(
+                    conv, add_generation_prompt=True, tokenize=False, enable_thinking=enable_thinking
+                ) for conv in conversations
+            ]
+        else:
+            prompts = [
+                build_prompt(
+                    system_prompt=conv[0]["content"],
+                    question=conv[1]["content"],
+                )
+                for conv in conversations
+            ]
+        #print("EVAL PROMPTS:")
+        #print(prompts)
+        #print("_____________________")
+    
         batch_inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(self.model.device)
 
         #start_time = torch.cuda.Event(enable_timing=True)
@@ -97,7 +109,7 @@ class HFModel:
             **batch_inputs, 
             max_new_tokens=max_new_tokens, 
             do_sample=True if temperature > 0 else False,
-            use_cache=True, 
+            use_cache=use_cache, 
             temperature=temperature, 
             top_p=0.9 if temperature > 0 else None,
             pad_token_id=self.tokenizer.eos_token_id,
