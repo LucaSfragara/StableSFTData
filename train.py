@@ -1,3 +1,4 @@
+
 from src.model.lm import HFModel
 from src.train import (
     Trainer,
@@ -26,16 +27,19 @@ def main():
     # 3. Configure training
     config = TrainingConfig(
         output_dir="checkpoints",
-        run_name="gsm8k_default_run",
-        learning_rate=3e-5,
+        run_name="GSM8K_0.15dropout",
+        learning_rate=2e-5,
         num_epochs=4,
         batch_size=64,
         gradient_accumulation_steps=1,
         use_lora=True,  # Use LoRA for efficient fine-tuning
-        lora_r=16,
+        lora_r=32,
+        lora_alpha=64,
         logging_steps=20,
-        eval_steps=100,
+        lora_dropout=0.15,
+        eval_steps=20,
         gradient_checkpointing=True,
+        save_every_n_steps=1,
     )
     
     # 4. Select training strategy
@@ -74,7 +78,7 @@ def main():
         system_prompt=GSM8K_FINE_TUNE,
     )
     
-    print("\nTraining Results:")
+    #print("\nTraining Results:")
     print(results)
     
     # 7. Evaluate generation quality on a held-out set
@@ -84,8 +88,9 @@ def main():
     
     eval_metrics = trainer.evaluate_generation_quality(
         eval_dataset=eval_dataset,  # type: ignore
-        num_samples=1000,  # Evaluate on 100 random samples
-        use_cache = False
+        num_samples=500,  # Evaluate on 500 random samples
+        use_cache = True, 
+        max_new_tokens=256,
     )
     
     print("\nFinal Evaluation Metrics:")

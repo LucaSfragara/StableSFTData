@@ -15,6 +15,7 @@ from src.utils.parser import Parser
 import json
 from trl import DataCollatorForCompletionOnlyLM
 from src.utils.prompt_builder import build_prompt
+import wandb
 
 class Trainer: 
     
@@ -39,7 +40,8 @@ class Trainer:
         self.callbacks = callbacks or []
         self.use_custom_chat_template = use_custom_chat_template
 
-        
+        wandb.init(project="huggingface", name=self.config.run_name, config=self.config.__dict__)
+
         os.makedirs(self.output_dir, exist_ok=True)
         
     
@@ -117,7 +119,7 @@ class Trainer:
         batch_size = getattr(self.config, "batch_size", 1)
         
         for start in range(0, len(eval_subset), batch_size):
-            
+        
             indices = list(range(start, min(start + batch_size, len(eval_subset))))
             batch = eval_subset.select(indices)
             
@@ -170,7 +172,10 @@ class Trainer:
                 total += 1
         
         accuracy = correct / total if total > 0 else 0.0
-           
+        
+        
+        
+        wandb.log({"generation_accuracy": accuracy, "correct": correct, "total": total}, step=step)
         metrics = {
             "generation_accuracy": accuracy,
             "correct": correct,
@@ -275,7 +280,7 @@ class Trainer:
             gradient_checkpointing=self.config.gradient_checkpointing,
             
             # Misc
-            report_to=["tensorboard"],
+            report_to=["wandb"],
             remove_unused_columns=True,
             
         )
@@ -297,6 +302,8 @@ class Trainer:
             response_template=response_template,
             return_tensors="pt",
         )
+        #Upload config JSON to wandb
+        
         
         SFT_trainer = SFTTrainer(
             model=model, #type: ignore
