@@ -42,14 +42,22 @@ class GenerationEvaluationCallback(TrainerCallback):
         This is where we add our custom generation-based evaluation.
         """
         # Only run if this is an evaluation step (not just logging)
+        print(state.global_step)
         if state.global_step == 0:
             return
         
+        if state.global_step < 100:
+            return
+        
+        if state.global_step > 300:
+            return
+            
         # Check if we should run this step
         if self.eval_every_n_steps is not None:
             if state.global_step % self.eval_every_n_steps != 0:
                 return
-        
+            
+           
         print(f"\n{'='*60}")
         print(f"Custom Generation Evaluation at Step {state.global_step}")
         print(f"{'='*60}")
@@ -65,8 +73,10 @@ class GenerationEvaluationCallback(TrainerCallback):
         
         # Track best accuracy
         current_accuracy = eval_metrics.get('generation_accuracy', 0.0)
-        if current_accuracy > self.best_accuracy:
+        if current_accuracy >= self.best_accuracy:
             self.best_accuracy = current_accuracy
+            #save model
+            self.trainer_instance.save_pretrained_model(f"best@{current_accuracy:.4f}-step{state.global_step}")
             print(f"🎉 New best generation accuracy: {current_accuracy:.2%}")
         
         # Store in history

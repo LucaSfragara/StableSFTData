@@ -27,17 +27,17 @@ def main():
     # 3. Configure training
     config = TrainingConfig(
         output_dir="checkpoints",
-        run_name="GSM8K_0.15dropout",
+        run_name="GSM8K_0.15dropout-second",
         learning_rate=2e-5,
-        num_epochs=4,
+        num_epochs=3,
         batch_size=64,
         gradient_accumulation_steps=1,
         use_lora=True,  # Use LoRA for efficient fine-tuning
         lora_r=32,
         lora_alpha=64,
-        logging_steps=20,
+        logging_steps=1,
         lora_dropout=0.15,
-        eval_steps=20,
+        eval_steps=10,
         gradient_checkpointing=True,
         save_every_n_steps=1,
     )
@@ -62,13 +62,14 @@ def main():
                       config=config, 
                       use_custom_chat_template=True)
     
+    #trainer.load_pretrained_model("checkpoint-260")
     
     eval_callback = GenerationEvaluationCallback(
         trainer_instance=trainer,
         eval_dataset=eval_dataset, # type: ignore
-        num_eval_samples=100,
+        num_eval_samples=500,
         enable_thinking=False,
-        max_new_tokens=256
+        max_new_tokens=256, 
     )
     
     trainer.callbacks.append(eval_callback)
@@ -78,17 +79,18 @@ def main():
         system_prompt=GSM8K_FINE_TUNE,
     )
     
-    #print("\nTraining Results:")
+    print("\nTraining Results:")
     print(results)
     
     # 7. Evaluate generation quality on a held-out set
+    
     print("\n" + "="*60)
     print("Running custom evaluation...")
     print("="*60)
     
     eval_metrics = trainer.evaluate_generation_quality(
         eval_dataset=eval_dataset,  # type: ignore
-        num_samples=500,  # Evaluate on 500 random samples
+        num_samples=100,  # Evaluate on 500 random samples
         use_cache = True, 
         max_new_tokens=256,
     )

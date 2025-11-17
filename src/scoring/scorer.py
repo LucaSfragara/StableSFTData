@@ -6,6 +6,7 @@ import os
 from multiprocessing import set_start_method
 import re  
 from src.utils.parser import Parser
+import numpy as np
 
 class Scorer:
 
@@ -51,6 +52,7 @@ class Scorer:
             desc="Calculating accuracy"
         )
         
+        print("Average Accuracy:", np.mean(result_dataset["accuracy"]))
         save_path = os.path.join("results", f"{self.dataset.info.dataset_name}_scored")
         print(f"Saving final dataset to {save_path}...")
         result_dataset.save_to_disk(save_path)
@@ -58,7 +60,7 @@ class Scorer:
 
     def _score_batch(self, batch):
 
-        system_prompt = prompts.GSM8K
+        system_prompt = prompts.GSM8K_SCORE
         questions = batch["question"]
         
         conversations = [

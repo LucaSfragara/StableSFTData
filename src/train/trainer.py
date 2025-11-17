@@ -4,7 +4,7 @@ import datasets
 from src.train.train_config import TrainingConfig
 import os
 from trl import SFTTrainer # type: ignore
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, PeftModel
 from src.train.data_selector import RandomDataSelector, DataSelector
 from typing import Dict, Any, Optional
 from transformers import TrainingArguments, EvalPrediction
@@ -16,6 +16,7 @@ import json
 from trl import DataCollatorForCompletionOnlyLM
 from src.utils.prompt_builder import build_prompt
 import wandb
+from transformers import AutoTokenizer
 
 class Trainer: 
     
@@ -40,7 +41,13 @@ class Trainer:
         self.callbacks = callbacks or []
         self.use_custom_chat_template = use_custom_chat_template
 
-        wandb.init(project="huggingface", name=self.config.run_name, config=self.config.__dict__)
+        wandb.init(
+            project="huggingface",
+            name=self.config.run_name,
+            config=self.config.__dict__,
+            resume = "allow",
+            id = "6dxl2wrr"
+            )
 
         os.makedirs(self.output_dir, exist_ok=True)
         
@@ -172,7 +179,6 @@ class Trainer:
                 total += 1
         
         accuracy = correct / total if total > 0 else 0.0
-        
         
         
         wandb.log({"generation_accuracy": accuracy, "correct": correct, "total": total}, step=step)
@@ -311,7 +317,7 @@ class Trainer:
             train_dataset=selected_train_dataset,
             eval_dataset=prepared_eval_dataset,
             callbacks=self.callbacks, 
-            data_collator=data_collator
+            data_collator=data_collator, 
         )
         
         print(f"\nStarting training...")
@@ -320,7 +326,9 @@ class Trainer:
         if prepared_eval_dataset:
             print(f"Evaluation samples: {len(prepared_eval_dataset)}")
 
-        train_result = SFT_trainer.train()
+        train_result = SFT_trainer.train(
+            resume_from_checkpoint=True
+        )
 
         # Save final model
         SFT_trainer.save_model()
@@ -333,4 +341,21 @@ class Trainer:
             "train_samples": len(selected_train_dataset),
             "output_dir": self.output_dir,
         }
+
+    def save_pretrained_model(self, name: str) -> None:
+        """Save the trained model and tokenizer to the output directory"""
         
+        self.model.model.save_pretrained(os.path.join(self.output_dir, name))
+        self.model.tokenizer.save_pretrained(os.path.join(self.output_dir, name))
+        print(f"Model and tokenizer saved to {self.output_dir}")
+        
+    def load_pretrained_model(self, model_name: str) -> None:
+        
+        """Load a pretrained model and tokenizer from the specified directory."""
+        checkpoint_dir = os.path.join(self.output_dir, model_name)
+        # load adapters on top of the already-loaded base model
+        self.model.model = PeftModel.from_pretrained(self.model.model, checkpoint_dir)
+        # load tokenizer from base or from ckpt if present
+        if os.path.exists(os.path.join(checkpoint_dir, "tokenizer_config.json")):
+            self.model.tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, use_fast=True)
+        print(f"Loaded LoRA adapters from: {checkpoint_dir}")

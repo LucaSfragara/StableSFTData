@@ -26,7 +26,7 @@ class TrainingConfig:
     logging_steps: int = 10
     eval_steps: int = 100
 
-    save_total_limit: int = 3
+    save_total_limit: int = 20
     save_every_n_steps: int = 10
     # Advanced options
     use_lora: bool = False

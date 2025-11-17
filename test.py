@@ -5,7 +5,7 @@ from src.scoring.scorer import Scorer
 import datasets
 from datasets.config import HF_DATASETS_CACHE
 import os
-from src.prompts import GSM8K_FINE_TUNE, GSM8K
+from src.prompts import GSM8K_FINE_TUNE
 
 def test_hfmodel_generation():
     #model_name = "Qwen/Qwen3-0.6B"
@@ -51,7 +51,7 @@ def test_hfmodel_gold_CE():
 
 def score():
     
-    model_name = "Qwen/Qwen3-0.6B"
+    model_name = "Qwen/Qwen2.5-Math-1.5B"
     model = HFModel(model_name)
     #dataset = datasets.load_dataset("gsm8k_processed")['train']
     dataset = datasets.load_from_disk(os.path.join(HF_DATASETS_CACHE, "gsm8k_processed"))['train']
@@ -59,18 +59,18 @@ def score():
 
     scorer = Scorer(model,
                     dataset, #type: ignore
-                    batch_size=64, 
-                    responses_per_sample=5,
+                    batch_size=128, 
+                    responses_per_sample=8,
                     max_new_token=512,
                     temperature=0.2,
-                    enable_thinking=False)
+                    enable_thinking=True)
     scorer.score()
 
 if __name__ == "__main__":
 
     #print("Testing HFModel...")
-    test_hfmodel_generation()
-    #score()
+    #test_hfmodel_generation()
+    score()
     
     #test_hfmodel_gold_CE()
    #test_hfmodel_generation()
