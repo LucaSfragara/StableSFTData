@@ -19,7 +19,7 @@ def test_hfmodel_generation():
     conversations_batch = [
         # Conversation 1
         [
-            {"role": "system", "content": GSM8K},
+            {"role": "system", "content": GSM8K_FINE_TUNE},
             {"role": "user", "content": "Benny threw bologna at his balloons.  He threw two pieces of bologna at each red balloon and three pieces of bologna at each yellow balloon.  If Benny threw 58 pieces of bologna at a bundle of red and yellow balloons, and twenty of the balloons were red, then how many of the balloons in the bundle were yellow?"}
         ]
     ]
@@ -59,7 +59,7 @@ def score():
 
     scorer = Scorer(model,
                     dataset, #type: ignore
-                    batch_size=128, 
+                    batch_size=256, 
                     responses_per_sample=8,
                     max_new_token=512,
                     temperature=0.2,

@@ -42,15 +42,14 @@ class GenerationEvaluationCallback(TrainerCallback):
         This is where we add our custom generation-based evaluation.
         """
         # Only run if this is an evaluation step (not just logging)
-        print(state.global_step)
         if state.global_step == 0:
             return
         
-        if state.global_step < 100:
-            return
+        #if state.global_step < 100:
+        #    return
         
-        if state.global_step > 300:
-            return
+        #if state.global_step > 300:
+        #    return
             
         # Check if we should run this step
         if self.eval_every_n_steps is not None:

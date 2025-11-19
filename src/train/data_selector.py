@@ -43,10 +43,10 @@ class RandomDataSelector(DataSelector):
 class FullDataSelector(DataSelector):
     """Selects the full dataset without any filtering."""
 
-    def __init__(self, seed: int):
+    def __init__(self, seed: int = 42):
         super().__init__(seed=seed)
 
-    def select_data(self, dataset: datasets.Dataset, n_samples: int) -> Any:
+    def select_data(self, dataset: datasets.Dataset, n_samples = None) -> Any:
         """Returns the full dataset regardless of n_samples."""
         return dataset
     
@@ -58,7 +58,7 @@ class ThresholdDataSelector(DataSelector):
         self.score_column = score_column
         self.minimum_score = minimum_score
 
-    def select_data(self, dataset: datasets.Dataset, n_samples: int) -> Any:
+    def select_data(self, dataset: datasets.Dataset, n_samples = None) -> Any:
         """Selects top or bottom n_samples based on the score column."""
         
         if self.score_column not in dataset.column_names:
@@ -79,7 +79,7 @@ class TopKDataSelector(DataSelector):
         self.k = k
         self.ascending = ascending
 
-    def select_data(self, dataset: datasets.Dataset, n_samples: int) -> Any:
+    def select_data(self, dataset: datasets.Dataset, n_samples = None) -> Any:
         """Selects the top K samples based on the score column."""
         if self.score_column not in dataset.column_names:
             raise ValueError(f"Score column '{self.score_column}' not found in dataset columns.")

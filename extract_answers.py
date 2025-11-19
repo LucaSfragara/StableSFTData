@@ -2,7 +2,7 @@ import os
 import re
 import argparse
 from typing import Dict, Any, List, Union
-from datasets import load_dataset, DatasetDict
+from datasets import load_dataset, DatasetDict, load_from_disk
 from datasets.config import HF_DATASETS_CACHE
 from src.utils.parser import Parser
 
@@ -25,7 +25,7 @@ def process_dataset(
     target_col: str = "answer_num",
     num_proc: int = 1,
 ):
-    
+
     ds = load_dataset(dataset_name, config_name)
     # Replace/insert target_col with extracted answer
     mapped = ds.map(
@@ -34,6 +34,17 @@ def process_dataset(
         num_proc=num_proc if num_proc and num_proc > 1 else None, # type: ignore
     )
     return mapped
+
+def load_scored_dataset(
+    dataset_name: str = "results/gsm8k_scored_",
+    score_col: str = "accuracy",
+) -> DatasetDict:
+
+    ds = load_from_disk(dataset_name)
+
+    return ds #type: ignore
+
+
 
 
 def save_to_hf_cache(ds: DatasetDict, dataset_name: str, config_name: str, suffix: str = "answers") -> str:
@@ -64,8 +75,15 @@ def main():
         target_col=args.target_col,
         num_proc=num_proc, #type: ignore
     )
-    out_dir = save_to_hf_cache(ds, args.dataset, args.config, args.suffix)
-    print(f"Saved processed dataset to: {out_dir}")
+    
+    ds_scored = load_scored_dataset(
+        dataset_name="results/gsm8k_scored_",
+        score_col="accuracy",
+    )
+    #out_dir = save_to_hf_cache(ds, args.dataset, args.config, args.suffix)
+    #print(f"Saved processed dataset to: {out_dir}")
+    print(len(ds_scored))
+    
     for split, d in ds.items():
         print(f"{split}: {len(d)} rows; columns={d.column_names}")
 

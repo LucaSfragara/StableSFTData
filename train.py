@@ -5,7 +5,8 @@ from src.train import (
     TrainingConfig,
     FullDataSelector,
     RandomDataSelector,
-    ThresholdDataSelector
+    ThresholdDataSelector, 
+    TopKDataSelector,
 )
 from datasets import load_dataset, load_from_disk
 from src.prompts import GSM8K_FINE_TUNE
@@ -27,7 +28,7 @@ def main():
     # 3. Configure training
     config = TrainingConfig(
         output_dir="checkpoints",
-        run_name="GSM8K_0.15dropout-second",
+        run_name="GSM8K_top1000",
         learning_rate=2e-5,
         num_epochs=3,
         batch_size=64,
@@ -37,23 +38,34 @@ def main():
         lora_alpha=64,
         logging_steps=1,
         lora_dropout=0.15,
-        eval_steps=10,
+        eval_steps=50,
         gradient_checkpointing=True,
         save_every_n_steps=1,
+        selector = "TopK",
+        k = 1000, 
+        minimum_score =0
     )
     
-    # 4. Select training strategy
-    # Option A: Train on top-scoring examples
-    #selector = ThresholdDataSelector(score_column="score", ascending=False)
+    #Initialize data selector based on config
+    score_column="accuracy"
     
-    # Option B: Train on full dataset
-    selector = FullDataSelector(seed=42)
+    if config.selector == "Full":
+        selector = FullDataSelector()
+    elif config.selector == "Random":
+        selector = RandomDataSelector()
+    elif config.selector == "Threshold":
+        selector = ThresholdDataSelector(
+            score_column=score_column, 
+            minimum_score=config.minimum_score
+        )
+    elif config.selector == "TopK":
+        selector = TopKDataSelector(
+            score_column="accuracy",
+            k=config.k,
+            ascending=True,
+            seed=42,
+        )
 
-    # Option C: Random selection
-    # selector = RandomDataSelector(seed=42)
-
-    
-    # Option D: Threshold-based
     # 5. Initialize trainer with proper splits and optional subsampling
     trainer = Trainer(model,
                       train_dataset=train_dataset, #type: ignore
@@ -67,7 +79,7 @@ def main():
     eval_callback = GenerationEvaluationCallback(
         trainer_instance=trainer,
         eval_dataset=eval_dataset, # type: ignore
-        num_eval_samples=500,
+        num_eval_samples=100,
         enable_thinking=False,
         max_new_tokens=256, 
     )
@@ -90,7 +102,7 @@ def main():
     
     eval_metrics = trainer.evaluate_generation_quality(
         eval_dataset=eval_dataset,  # type: ignore
-        num_samples=100,  # Evaluate on 500 random samples
+        num_samples=1000,  # Evaluate on 1000 random samples
         use_cache = True, 
         max_new_tokens=256,
     )

@@ -3,13 +3,11 @@ import os
 import sys
 from typing import Optional, Tuple
 from datasets import load_from_disk, Dataset, DatasetDict
-from datasets.utils.logging import set_verbosity_error
+import matplotlib.pyplot as plt
 from pprint import pprint
-from src.scoring.scorer import Scorer
+#from src.scoring.scorer import Scorer
 import numpy as np
-
-set_verbosity_error()
-
+#from src.train.data_selector import FullDataSelector, RandomDataSelector, ThresholdDataSelector, TopKDataSelector
 
 def is_hf_dataset_dir(path: str) -> Optional[bool]:
     if not os.path.isdir(path):
@@ -119,25 +117,45 @@ def main():
     if ds is None:
         sys.exit(2)
 
-    summarize_dataset(ds)
+    # Save histogram of accuracy scores
+    if "accuracy" in ds.features:
+        plt.figure()
+        plt.hist(ds["accuracy"], bins=20)
+        plt.title("Accuracy Score Distribution")
+        plt.xlabel("Accuracy")
+        plt.ylabel("Frequency")
+        plt.grid()
+        plt.savefig("accuracy_histogram.png")
+        plt.close()
 
-    if isinstance(ds, DatasetDict):
+    #data_selector = TopKDataSelector(
+    #    score_column="accuracy",
+    #    k=500,
+    #    ascending=True,
+    #    seed=42,
+    #)
+
+    #ds_selected = data_selector.select_data(ds) #type: ignore
+    ds_selected = ds
+    summarize_dataset(ds_selected)
+
+    if isinstance(ds_selected, DatasetDict):
         # Pick split
         split_to_show = None
         if args.split:
-            if args.split in ds:
+            if args.split in ds_selected:
                 split_to_show = args.split
             else:
-                print(f"Requested split '{args.split}' not found. Available: {list(ds.keys())}")
+                print(f"Requested split '{args.split}' not found. Available: {list(ds_selected.keys())}")
                 # Fallback to 'train' or first
         if split_to_show is None:
-            split_to_show = "train" if "train" in ds else next(iter(ds.keys()))
-        print(f"Showing split: {split_to_show} (rows={len(ds[split_to_show])})")
-        print_features(ds[split_to_show])
-        show_rows(ds[split_to_show], args.rows)
+            split_to_show = "train" if "train" in ds_selected else next(iter(ds_selected.keys()))
+        print(f"Showing split: {split_to_show} (rows={len(ds_selected[split_to_show])})")
+        print_features(ds_selected[split_to_show])
+        show_rows(ds_selected[split_to_show], args.rows)
     else:
-        print_features(ds)
-        show_rows(ds, args.rows)
+        print_features(ds_selected)
+        #show_rows(ds_selected, args.rows)
 
 
 if __name__ == "__main__":

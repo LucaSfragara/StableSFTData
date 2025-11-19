@@ -46,7 +46,7 @@ class Trainer:
             name=self.config.run_name,
             config=self.config.__dict__,
             resume = "allow",
-            id = "6dxl2wrr"
+            #id = "6dxl2wrr"
             )
 
         os.makedirs(self.output_dir, exist_ok=True)
@@ -234,6 +234,8 @@ class Trainer:
         
         selected_data = self.data_selector.select_data(dataset, n_samples=n_samples)
 
+        if "accuracy" in selected_data.column_names:
+            print(f"Mean accuracy of the data: {np.mean(selected_data['accuracy']):.2f}")
 
         print(f" --> selected {len(selected_data)} samples from the training dataset.")
         
@@ -287,8 +289,7 @@ class Trainer:
             
             # Misc
             report_to=["wandb"],
-            remove_unused_columns=True,
-            
+            remove_unused_columns=True,            
         )
         
         selected_train_dataset = self.prepare_train_dataset(

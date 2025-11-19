@@ -7,7 +7,7 @@ from multiprocessing import set_start_method
 import re  
 from src.utils.parser import Parser
 import numpy as np
-
+import time
 class Scorer:
 
     def __init__(self, model: HFModel,
@@ -53,7 +53,7 @@ class Scorer:
         )
         
         print("Average Accuracy:", np.mean(result_dataset["accuracy"]))
-        save_path = os.path.join("results", f"{self.dataset.info.dataset_name}_scored")
+        save_path = os.path.join("results", f"{self.dataset.info.dataset_name}_scored_{time.strftime('%Y%m%d_%H%M%S')}")
         print(f"Saving final dataset to {save_path}...")
         result_dataset.save_to_disk(save_path)
 

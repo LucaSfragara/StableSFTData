@@ -26,7 +26,7 @@ class TrainingConfig:
     logging_steps: int = 10
     eval_steps: int = 100
 
-    save_total_limit: int = 20
+    save_total_limit: int = 3
     save_every_n_steps: int = 10
     # Advanced options
     use_lora: bool = False
@@ -38,9 +38,19 @@ class TrainingConfig:
     fp16: bool = True
     gradient_checkpointing: bool = True
     
+    #data selector
+    selector: str = "Full"
+    k: int = 1000
+    
+    minimum_score: float = 0.0
+    
     def __post_init__(self):
         if self.run_name is None:
            
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             self.run_name = f"sft_{timestamp}"
             
+    #check selector is valid
+        valid_selectors = ["Full", "Random", "Threshold", "TopK"]
+        if self.selector not in valid_selectors:
+            raise ValueError(f"Invalid selector '{self.selector}'. Must be one of {valid_selectors}.")
