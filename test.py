@@ -59,7 +59,7 @@ def score():
 
     scorer = Scorer(model,
                     dataset, #type: ignore
-                    batch_size=256, 
+                    batch_size=128, 
                     responses_per_sample=8,
                     max_new_token=512,
                     temperature=0.2,

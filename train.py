@@ -20,10 +20,12 @@ def main():
     #model = HFModel("Qwen/Qwen3-0.6B")
     model = HFModel("allenai/open-instruct-pythia-6.9b-tulu")
     # Load GSM8K dataset
-    dataset_dict = load_from_disk(os.path.join(HF_DATASETS_CACHE, "gsm8k_processed"))
+    eval_dataset = load_from_disk(os.path.join(HF_DATASETS_CACHE, "gsm8k_processed"))['test']
+    train_dataset = load_from_disk(os.path.join("./results", "gsm8k_scored_20251119_001339"))
     
-    train_dataset = dataset_dict["train"]
-    eval_dataset = dataset_dict["test"]
+    
+    #train_dataset = dataset_dict["train"]
+    #eval_dataset = dataset_dict["test"]
     
     # 3. Configure training
     config = TrainingConfig(
