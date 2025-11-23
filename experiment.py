@@ -104,7 +104,7 @@ def main():
     # Each experiment is a different subset of the data
     experiments = [
         {
-            "name": "hard_subset",
+            "name": "hard_subset_long",
             "description": "Hard problems (low accuracy, ascending=True)",
             "selector": TopKDataSelector(
                 score_column="accuracy",
@@ -115,7 +115,7 @@ def main():
             "n_samples": None,  # TopK determines the size
         },
         {
-            "name": "easy_subset",
+            "name": "easy_subset_long",
             "description": "Easy problems (high accuracy, ascending=False)",
             "selector": TopKDataSelector(
                 score_column="accuracy",
@@ -126,7 +126,7 @@ def main():
             "n_samples": None,
         },
         {
-             "name": "random_subset",
+             "name": "random_subset_long",
              "description": "Random sample",
              "selector": RandomDataSelector(),
              "n_samples": 2000,
@@ -147,7 +147,7 @@ def main():
         "eval_steps": 20,
         "gradient_checkpointing": True,
         "save_every_n_steps": 1,
-        "num_epochs": 7,
+        "num_epochs": 13,
     }
 
     # Step 1: Count tokens for all experiments
