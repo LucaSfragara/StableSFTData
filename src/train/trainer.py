@@ -6,7 +6,7 @@ import os
 from trl import SFTTrainer # type: ignore
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, PeftModel
 from src.train.data_selector import RandomDataSelector, DataSelector
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from transformers import TrainingArguments, EvalPrediction
 import re
 import numpy as np
@@ -19,6 +19,10 @@ import wandb
 from transformers import AutoTokenizer
 # Optionally delete local copy to save space
 import shutil
+from src.utils.token_utils import count_dataset_tokens as count_tokens_util
+
+if TYPE_CHECKING:
+    from src.train.callbacks import TokenCountingCallback
 
 class Trainer: 
     
@@ -43,6 +47,8 @@ class Trainer:
         self.callbacks = callbacks or []
         self.use_custom_chat_template = use_custom_chat_template
 
+        self.best_model_name = None
+        
         wandb.init(
             project="huggingface",
             name=self.config.run_name,
@@ -105,7 +111,8 @@ class Trainer:
         max_new_tokens: int = 512,
         enable_thinking: bool = False, 
         step: int = 0,
-        use_cache: bool = True
+        use_cache: bool = True, 
+        model_to_use: Optional[HFModel] = None
     ) -> Dict[str, float]:
         """
         Evaluate the model's generation quality by generating answers
@@ -113,14 +120,18 @@ class Trainer:
         
         This is separate from the training loop evaluation.
         Call this manually after training to assess performance.
+        
+        model_to_use: Optional HFModel to use for generation, if None uses self.model
         """
-        print(f"\nEvaluating generation quality on {num_samples} samples...")
+        print(f"\nEvaluating generation quality on {num_samples} samples with model: {model_to_use.__class__.__name__ if model_to_use else 'self.model'}...")
         
         # Sample from eval dataset
         if num_samples < len(eval_dataset):
             eval_subset = eval_dataset.shuffle(seed=42).select(range(num_samples))
         else:
             eval_subset = eval_dataset
+        
+        model = model_to_use if model_to_use is not None else self.model
         
         correct = 0
         total = 0
@@ -142,7 +153,7 @@ class Trainer:
             ]
 
             try:
-                generated_batch = self.model.chat(
+                generated_batch = model.chat(
                     conversations,
                     max_new_tokens=max_new_tokens,
                     enable_thinking=enable_thinking,
@@ -251,6 +262,21 @@ class Trainer:
         
         return selected_data
 
+    def count_dataset_tokens(self, dataset: datasets.Dataset, system_prompt: str) -> Dict[str, Any]:
+        """
+        Count total tokens in dataset after formatting.
+
+        Args:
+            dataset: The dataset to count tokens for
+            system_prompt: System prompt to use when formatting
+
+        Returns:
+            Dictionary with token statistics
+        """
+        # Use the utility function with a lambda that captures system_prompt
+        format_fn = lambda example: self._format_sample(example, system_prompt)
+        return count_tokens_util(dataset, self.model.tokenizer, format_fn)
+
     def train(self, n_samples: Optional[int], system_prompt: str) -> Dict[str, Any]:
 
         """
@@ -259,15 +285,83 @@ class Trainer:
         Returns:
             Training Metrics and Statistics
         """
-        
-        model = self._setup_lora() #setup LoRA if enabled in config, otherwise use base model
+
+        self.model.model = self._setup_lora() #setup LoRA if enabled in config, otherwise use base model
+
+        selected_train_dataset = self.prepare_train_dataset(
+            self.train_dataset,
+            n_samples=n_samples,
+            system_prompt=system_prompt
+        )
+
+        # Token-based training control
+        max_steps = -1  # Default: use epoch-based training
+        num_train_epochs = self.config.num_epochs
+        tokens_per_batch = None
+        token_stats = None
+
+        if self.config.training_mode == "tokens":
+            print("\n" + "="*60)
+            print("TOKEN-BASED TRAINING MODE")
+            print("="*60)
+
+            # Count tokens in the selected dataset
+            token_stats = self.count_dataset_tokens(selected_train_dataset, system_prompt)
+
+            # Calculate tokens per batch
+            tokens_per_sample = token_stats["mean_tokens"]
+            effective_batch_size = self.config.batch_size * self.config.gradient_accumulation_steps
+            tokens_per_batch = tokens_per_sample * effective_batch_size
+
+            # Calculate max_steps to reach target token budget
+            max_steps = int(self.config.max_training_tokens / tokens_per_batch)
+
+            # Calculate effective epochs for logging
+            steps_per_epoch = len(selected_train_dataset) // effective_batch_size
+            effective_epochs = max_steps / steps_per_epoch if steps_per_epoch > 0 else 0
+
+            print(f"\nToken-based training configuration:")
+            print(f"  Target tokens: {self.config.max_training_tokens:,}")
+            print(f"  Dataset total tokens: {token_stats['total_tokens']:,}")
+            print(f"  Mean tokens/sample: {tokens_per_sample:.1f}")
+            print(f"  Effective batch size: {effective_batch_size}")
+            print(f"  Tokens/batch: {tokens_per_batch:.1f}")
+            print(f"  Calculated max_steps: {max_steps:,}")
+            print(f"  Effective epochs: {effective_epochs:.2f}")
+            print("="*60 + "\n")
+
+            # Log to W&B
+            wandb.log({
+                "config/training_mode": "tokens",
+                "config/max_training_tokens": self.config.max_training_tokens,
+                "dataset/total_tokens": token_stats["total_tokens"],
+                "dataset/mean_tokens_per_sample": tokens_per_sample,
+                "dataset/median_tokens_per_sample": token_stats["median_tokens"],
+                "dataset/min_tokens": token_stats["min_tokens"],
+                "dataset/max_tokens": token_stats["max_tokens"],
+                "dataset/num_samples": token_stats["num_samples"],
+                "train/tokens_per_batch": tokens_per_batch,
+                "train/max_steps": max_steps,
+                "train/effective_epochs": effective_epochs,
+            })
+
+            # Override epochs (max_steps takes precedence)
+            num_train_epochs = effective_epochs if effective_epochs > 0 else 1
+
+        else:
+            print(f"\nEpoch-based training mode: {self.config.num_epochs} epochs")
+            wandb.log({
+                "config/training_mode": "epochs",
+                "config/num_epochs": self.config.num_epochs,
+            })
 
         training_args = TrainingArguments(
             output_dir=self.output_dir,
             run_name=self.config.run_name,
-            
+
             # Training hyperparameters
-            num_train_epochs=self.config.num_epochs,
+            num_train_epochs=num_train_epochs,
+            max_steps=max_steps,  # Overrides num_train_epochs when > 0
             per_device_train_batch_size=self.config.batch_size,
             per_device_eval_batch_size=self.config.batch_size,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
@@ -275,13 +369,13 @@ class Trainer:
             weight_decay=self.config.weight_decay,
             max_grad_norm=self.config.max_grad_norm,
             warmup_ratio=self.config.warmup_ratio,
-            
+
             # Logging and saving
             logging_steps=self.config.logging_steps,
             eval_steps=self.config.eval_steps if self.eval_dataset else None,
             save_steps=self.config.save_every_n_steps * self.config.eval_steps if self.eval_dataset else None, #type: ignore
             save_total_limit=self.config.save_total_limit,
-            
+
             # Evaluation
             eval_strategy="steps" if self.eval_dataset else "no",
             load_best_model_at_end=True if self.eval_dataset else False,
@@ -290,16 +384,10 @@ class Trainer:
             # Hardware optimization
             fp16=self.config.fp16,
             gradient_checkpointing=self.config.gradient_checkpointing,
-            
+
             # Misc
             report_to=["wandb"],
-            remove_unused_columns=True,            
-        )
-        
-        selected_train_dataset = self.prepare_train_dataset(
-            self.train_dataset,
-            n_samples=n_samples,
-            system_prompt=system_prompt
+            remove_unused_columns=True,
         )
       
         prepared_eval_dataset = self.eval_dataset.map(
@@ -314,14 +402,25 @@ class Trainer:
             return_tensors="pt",
         )
 
-        
+        # Add TokenCountingCallback if using token-based training
+        callbacks_to_use = self.callbacks.copy() if self.callbacks else []
+        if self.config.training_mode == "tokens" and tokens_per_batch is not None:
+            # Import here to avoid circular dependency
+            from src.train.callbacks import TokenCountingCallback
+            token_callback = TokenCountingCallback(
+                tokens_per_batch=tokens_per_batch,
+                max_training_tokens=self.config.max_training_tokens
+            )
+            callbacks_to_use.append(token_callback)
+            print("Added TokenCountingCallback to track token usage during training.\n")
+
         SFT_trainer = SFTTrainer(
-            model=model, #type: ignore
+            model=self.model.model, #type: ignore
             args=training_args,
             train_dataset=selected_train_dataset,
             eval_dataset=prepared_eval_dataset,
-            callbacks=self.callbacks, 
-            data_collator=data_collator, 
+            callbacks=callbacks_to_use,
+            data_collator=data_collator,
         )
         
         print(f"\nStarting training...")
@@ -373,12 +472,35 @@ class Trainer:
             print(f"Deleted local model directory: {self.output_dir}")
         
     def load_pretrained_model(self, model_name: str) -> None:
-        
-        """Load a pretrained model and tokenizer from the specified directory."""
+        """Load LoRA adapters from a checkpoint onto the existing base model."""
         checkpoint_dir = os.path.join(self.output_dir, model_name)
-        # load adapters on top of the already-loaded base model
-        self.model.model = PeftModel.from_pretrained(self.model.model, checkpoint_dir)
-        # load tokenizer from base or from ckpt if present
+
+        # Validate checkpoint directory exists
+        if not os.path.exists(checkpoint_dir):
+            raise FileNotFoundError(f"Checkpoint directory not found: {checkpoint_dir}")
+
+        print(f"Loading LoRA adapters from: {checkpoint_dir}")
+
+        if isinstance(self.model.model, PeftModel):
+            print("Detected existing PeftModel. Unloading current adapters to get base model...")
+            # .unload() removes the adapter wrapper and returns the base model
+            self.model.model = self.model.model.unload()
+        
+        # Load LoRA adapters on top of the already-loaded base model
+        self.model.model = PeftModel.from_pretrained(
+            self.model.model,
+            checkpoint_dir,
+            local_files_only=True
+        )
+
+        # Load tokenizer from checkpoint if present
         if os.path.exists(os.path.join(checkpoint_dir, "tokenizer_config.json")):
-            self.model.tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, use_fast=True)
-        print(f"Loaded LoRA adapters from: {checkpoint_dir}")
+            self.model.tokenizer = AutoTokenizer.from_pretrained(
+                checkpoint_dir,
+                use_fast=True,
+                local_files_only=True
+            )
+
+        print(f"✓ Successfully loaded LoRA adapters from: {checkpoint_dir}")
+
+   

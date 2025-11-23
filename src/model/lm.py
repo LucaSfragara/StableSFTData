@@ -22,7 +22,7 @@ class HFModel:
             low_cpu_mem_usage=True, 
             quantization_config=bnb_config,
             device_map="auto", 
-            attn_implementation="sdpa"
+            attn_implementation="sdpa", 
         ).eval()
         
         self.model.config.use_cache = False

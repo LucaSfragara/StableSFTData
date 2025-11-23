@@ -1,8 +1,11 @@
 from math import e
 from transformers import TrainerCallback, TrainingArguments, TrainerState, TrainerControl
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import datasets
-from src.train.trainer import Trainer
+import wandb
+
+if TYPE_CHECKING:
+    from src.train.trainer import Trainer
 
 class GenerationEvaluationCallback(TrainerCallback):
     """
@@ -12,7 +15,7 @@ class GenerationEvaluationCallback(TrainerCallback):
     
     def __init__(
         self,
-        trainer_instance: Trainer,
+        trainer_instance: "Trainer",
         eval_dataset: datasets.Dataset,
         num_eval_samples: int = 100,
         eval_every_n_steps: Optional[int] = None,
@@ -75,7 +78,9 @@ class GenerationEvaluationCallback(TrainerCallback):
         if current_accuracy >= self.best_accuracy:
             self.best_accuracy = current_accuracy
             #save model
-            self.trainer_instance.save_pretrained_model(f"best-at-{current_accuracy:.4f}-step{state.global_step}", 
+            best_model_name = f"best-at-{current_accuracy:.4f}-step{state.global_step}"
+            self.trainer_instance.best_model_name = best_model_name
+            self.trainer_instance.save_pretrained_model(best_model_name, 
                                                         delete_local_after_upload = False)
             print(f"🎉 New best generation accuracy: {current_accuracy:.2%}")
         
@@ -104,4 +109,55 @@ class GenerationEvaluationCallback(TrainerCallback):
         for entry in self.eval_history:
             print(f"  Step {entry['step']:4d} (Epoch {entry['epoch']:.2f}): "
                   f"Accuracy = {entry['generation_accuracy']:.2%}")
+        print(f"{'='*60}\n")
+
+
+class TokenCountingCallback(TrainerCallback):
+    """
+    Callback to track total tokens seen during training.
+    Logs cumulative tokens to W&B for monitoring token-based training budgets.
+    """
+
+    def __init__(self, tokens_per_batch: float, max_training_tokens: Optional[int] = None):
+        """
+        Args:
+            tokens_per_batch: Average tokens processed per training batch
+            max_training_tokens: Optional maximum token budget (for reference logging)
+        """
+        self.tokens_per_batch = tokens_per_batch
+        self.max_training_tokens = max_training_tokens
+        self.total_tokens_seen = 0
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState,
+                   control: TrainerControl, **kwargs):
+        """Track tokens seen after each training step."""
+        self.total_tokens_seen += self.tokens_per_batch
+
+        # Log periodically to W&B
+        if state.global_step % args.logging_steps == 0:
+            log_dict = {
+                "tokens/tokens_seen": self.total_tokens_seen,
+                "tokens/tokens_per_step": self.tokens_per_batch,
+                "train/global_step": state.global_step,
+            }
+
+            # Add progress percentage if max_training_tokens is set
+            if self.max_training_tokens:
+                progress = (self.total_tokens_seen / self.max_training_tokens) * 100
+                log_dict["tokens/progress_percent"] = progress
+
+            wandb.log(log_dict)
+
+    def on_train_end(self, args: TrainingArguments, state: TrainerState,
+                    control: TrainerControl, **kwargs):
+        """Print summary at the end of training."""
+        print(f"\n{'='*60}")
+        print("Token Usage Summary")
+        print(f"{'='*60}")
+        print(f"Total tokens seen: {self.total_tokens_seen:,}")
+        print(f"Tokens per batch: {self.tokens_per_batch:.1f}")
+        if self.max_training_tokens:
+            print(f"Target tokens: {self.max_training_tokens:,}")
+            progress = (self.total_tokens_seen / self.max_training_tokens) * 100
+            print(f"Progress: {progress:.1f}%")
         print(f"{'='*60}\n")

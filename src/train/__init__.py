@@ -1,6 +1,7 @@
 from src.train.trainer import Trainer
 from src.train.train_config import TrainingConfig
-from src.train.data_selector import FullDataSelector, RandomDataSelector, ThresholdDataSelector, TopKDataSelector
+from src.train.data_selector import (
+    FullDataSelector, RandomDataSelector, ThresholdDataSelector, TopKDataSelector, DataSelector)
 
 __all__ = [
     "Trainer",
@@ -9,4 +10,5 @@ __all__ = [
     "RandomDataSelector",
     "ThresholdDataSelector",
     "TopKDataSelector",
+    "DataSelector",
 ]

@@ -52,16 +52,16 @@ def main():
     #Initialize data selector based on config
     score_column="accuracy"
     
-    if config.selector == "Full":
+    if config.selector == "FullDataSelector":
         selector = FullDataSelector()
-    elif config.selector == "Random":
+    elif config.selector == "RandomDataSelector":
         selector = RandomDataSelector()
-    elif config.selector == "Threshold":
+    elif config.selector == "ThresholdDataSelector":
         selector = ThresholdDataSelector(
             score_column=score_column, 
             minimum_score=config.minimum_score
         )
-    elif config.selector == "TopK":
+    elif config.selector == "TopKDataSelector":
         selector = TopKDataSelector(
             score_column="accuracy",
             k=config.k,
