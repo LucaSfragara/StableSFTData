@@ -14,6 +14,7 @@ from datasets.config import HF_DATASETS_CACHE
 from src.train.callbacks import GenerationEvaluationCallback
 import os
 from src.utils.prompt_builder import build_prompt
+os.environ["WANDB_DIR"] = "/tmp"
 
 def main():
   
@@ -21,7 +22,7 @@ def main():
     model = HFModel("allenai/open-instruct-pythia-6.9b-tulu")
     # Load GSM8K dataset
     eval_dataset = load_from_disk(os.path.join(HF_DATASETS_CACHE, "gsm8k_processed"))['test']
-    train_dataset = load_from_disk(os.path.join("./results", "gsm8k_scored_20251119_001339"))
+    train_dataset = load_from_disk(os.path.join("/orcd/home/002/lsfragar/orcd/pool/", "gsm8k_scored_20251119_001339"))
     
     
     #train_dataset = dataset_dict["train"]
@@ -29,10 +30,10 @@ def main():
     
     # 3. Configure training
     config = TrainingConfig(
-        output_dir="checkpoints",
-        run_name="GSM8K_top1000",
+        output_dir="/orcd/home/002/lsfragar/orcd/pool/checkpoints",
+        run_name="GSM8K_Random2500",
         learning_rate=2e-5,
-        num_epochs=3,
+        num_epochs=6,
         batch_size=64,
         gradient_accumulation_steps=1,
         use_lora=True,  # Use LoRA for efficient fine-tuning
@@ -40,11 +41,11 @@ def main():
         lora_alpha=64,
         logging_steps=1,
         lora_dropout=0.15,
-        eval_steps=50,
+        eval_steps=20,
         gradient_checkpointing=True,
         save_every_n_steps=1,
-        selector = "TopK",
-        k = 1000, 
+        selector = "Random",
+        k = 2500, 
         minimum_score =0
     )
     
@@ -89,7 +90,7 @@ def main():
     trainer.callbacks.append(eval_callback)
     # 6. Train!
     results = trainer.train(
-        n_samples=None, 
+        n_samples=None if config.selector == "TopK" else config.k, 
         system_prompt=GSM8K_FINE_TUNE,
     )
     
@@ -104,7 +105,7 @@ def main():
     
     eval_metrics = trainer.evaluate_generation_quality(
         eval_dataset=eval_dataset,  # type: ignore
-        num_samples=1000,  # Evaluate on 1000 random samples
+        num_samples=500,  # Evaluate on 1000 random samples
         use_cache = True, 
         max_new_tokens=256,
     )

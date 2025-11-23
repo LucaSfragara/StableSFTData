@@ -1,13 +1,19 @@
-import argparse
+# Force transformers to not use TensorFlow to avoid slow imports/conflicts
 import os
+os.environ["USE_TF"] = "0"
+os.environ["USE_TORCH"] = "1"
+
+import argparse
+
 import sys
 from typing import Optional, Tuple
 from datasets import load_from_disk, Dataset, DatasetDict
 import matplotlib.pyplot as plt
 from pprint import pprint
-#from src.scoring.scorer import Scorer
+from src.scoring.scorer import Scorer
 import numpy as np
-#from src.train.data_selector import FullDataSelector, RandomDataSelector, ThresholdDataSelector, TopKDataSelector
+from src.train.data_selector import FullDataSelector, RandomDataSelector, ThresholdDataSelector, TopKDataSelector
+
 
 def is_hf_dataset_dir(path: str) -> Optional[bool]:
     if not os.path.isdir(path):
@@ -53,6 +59,8 @@ def summarize_dataset(ds: Dataset) -> None:
     
     if "accuracy" in ds.features:
         print("Mean Accuracy: ", np.mean(ds["accuracy"]))
+        
+    print("Average length of answers: ", np.mean([len(str(a).split()) for a in ds["answer"]]))
    
 def print_features(ds: Dataset) -> None:
     try:
@@ -105,7 +113,7 @@ def main():
     default_results = os.path.join(script_dir, "results")
 
     base_path = args.path if args.path else default_results
-    dataset_dir = find_first_dataset_dir(base_path)
+    dataset_dir = "/orcd/home/002/lsfragar/orcd/pool/gsm8k_scored_20251119_001339"
 
     if dataset_dir is None:
         print(f"Could not find a saved HF dataset under: {base_path}")
@@ -128,15 +136,15 @@ def main():
         plt.savefig("accuracy_histogram.png")
         plt.close()
 
-    #data_selector = TopKDataSelector(
-    #    score_column="accuracy",
-    #    k=500,
-    #    ascending=True,
-    #    seed=42,
-    #)
+    data_selector = TopKDataSelector(
+        score_column="accuracy",
+        k=7000,
+        ascending=False,
+        seed=42,
+    )
 
-    #ds_selected = data_selector.select_data(ds) #type: ignore
-    ds_selected = ds
+    ds_selected = data_selector.select_data(ds) #type: ignore
+    #ds_selected = ds
     summarize_dataset(ds_selected)
 
     if isinstance(ds_selected, DatasetDict):

@@ -17,6 +17,8 @@ from trl import DataCollatorForCompletionOnlyLM
 from src.utils.prompt_builder import build_prompt
 import wandb
 from transformers import AutoTokenizer
+# Optionally delete local copy to save space
+import shutil
 
 class Trainer: 
     
@@ -181,12 +183,14 @@ class Trainer:
         accuracy = correct / total if total > 0 else 0.0
         
         
-        wandb.log({"generation_accuracy": accuracy, "correct": correct, "total": total}, step=step)
         metrics = {
             "generation_accuracy": accuracy,
             "correct": correct,
-            "total": total
+            "total": total, 
+            "train/global_step": step
         }
+        
+        wandb.log(metrics)
         
         print(f"Generation Accuracy: {accuracy:.2%} ({correct}/{total})")
         
@@ -275,7 +279,7 @@ class Trainer:
             # Logging and saving
             logging_steps=self.config.logging_steps,
             eval_steps=self.config.eval_steps if self.eval_dataset else None,
-            save_steps=self.config.save_every_n_steps * self.config.eval_steps if self.eval_dataset else None,
+            save_steps=self.config.save_every_n_steps * self.config.eval_steps if self.eval_dataset else None, #type: ignore
             save_total_limit=self.config.save_total_limit,
             
             # Evaluation
@@ -309,8 +313,7 @@ class Trainer:
             response_template=response_template,
             return_tensors="pt",
         )
-        #Upload config JSON to wandb
-        
+
         
         SFT_trainer = SFTTrainer(
             model=model, #type: ignore
@@ -328,7 +331,7 @@ class Trainer:
             print(f"Evaluation samples: {len(prepared_eval_dataset)}")
 
         train_result = SFT_trainer.train(
-            resume_from_checkpoint=True
+            #resume_from_checkpoint=True
         )
 
         # Save final model
@@ -343,12 +346,31 @@ class Trainer:
             "output_dir": self.output_dir,
         }
 
-    def save_pretrained_model(self, name: str) -> None:
+    def save_pretrained_model(self, name: str, delete_local_after_upload = False) -> None:
         """Save the trained model and tokenizer to the output directory"""
+
+        save_path = os.path.join(self.output_dir, name)
+        self.model.model.save_pretrained(save_path)
+        self.model.tokenizer.save_pretrained(save_path)
+
+        #Log to wandb
+        print("Uploading model to W&B...")
         
-        self.model.model.save_pretrained(os.path.join(self.output_dir, name))
-        self.model.tokenizer.save_pretrained(os.path.join(self.output_dir, name))
+        artifact = wandb.Artifact(
+                name=name, 
+                type="model",
+                description="Fine-tuned model checkpoint"
+        )
+        artifact.add_dir(save_path)
+        wandb.log_artifact(artifact)
+        
+        
         print(f"Model and tokenizer saved to {self.output_dir}")
+        
+        if delete_local_after_upload:
+            shutil.rmtree(save_path)
+            
+            print(f"Deleted local model directory: {self.output_dir}")
         
     def load_pretrained_model(self, model_name: str) -> None:
         

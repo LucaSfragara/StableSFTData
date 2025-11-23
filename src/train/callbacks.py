@@ -75,7 +75,8 @@ class GenerationEvaluationCallback(TrainerCallback):
         if current_accuracy >= self.best_accuracy:
             self.best_accuracy = current_accuracy
             #save model
-            self.trainer_instance.save_pretrained_model(f"best@{current_accuracy:.4f}-step{state.global_step}")
+            self.trainer_instance.save_pretrained_model(f"best-at-{current_accuracy:.4f}-step{state.global_step}", 
+                                                        delete_local_after_upload = False)
             print(f"🎉 New best generation accuracy: {current_accuracy:.2%}")
         
         # Store in history
